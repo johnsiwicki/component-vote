@@ -1,0 +1,6 @@
+.profile { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid #dde1e9; border-radius: 14px; font: 15px system-ui, sans-serif; color: #1c2030; }
+.avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #fde68a; font-weight: 700; }
+.profile strong, .profile span { display: block; }
+.profile span { color: #626a7d; font-size: 13px; }
+.profile button { margin-left: 12px; padding: 6px 14px; border: 1px solid #4f46e5; border-radius: 8px; background: #fff; color: #4f46e5; font: inherit; font-weight: 600; cursor: pointer; }
+.profile button.following { background: #4f46e5; color: #fff; }

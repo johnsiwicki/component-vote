@@ -1,0 +1,11 @@
+{
+  "name": "component-vote",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Simple upvoting for HTML/CSS/JS components",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=18" }
+}

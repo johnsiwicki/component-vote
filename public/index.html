@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Component Vote</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site-header">
+    <h1>Component Vote</h1>
+    <p>Upvote the components you want to see shipped, and tell us why.</p>
+  </header>
+
+  <main id="components" class="grid" aria-live="polite"></main>
+
+  <dialog id="vote-dialog">
+    <form id="vote-form" method="dialog" novalidate>
+      <h2>Upvote <span id="vote-target"></span></h2>
+
+      <label class="field">
+        <span class="label-row">
+          <span>Your team</span>
+          <span class="tag tag-required">Required</span>
+        </span>
+        <input name="team" list="team-list" maxlength="60" required autocomplete="off" placeholder="e.g. Design Systems">
+        <datalist id="team-list"></datalist>
+      </label>
+
+      <label class="field">
+        <span class="label-row">
+          <span>Comment</span>
+          <span class="tag tag-optional">Optional</span>
+        </span>
+        <textarea name="comment" rows="3" maxlength="1000" placeholder="What do you like about it? Where would you use it?"></textarea>
+      </label>
+
+      <label class="field field-optional">
+        <span class="label-row">
+          <span>Your name</span>
+          <span class="tag tag-optional">Optional</span>
+        </span>
+        <input name="name" maxlength="60" autocomplete="name" placeholder="Leave blank to vote anonymously">
+        <span class="hint">You don't have to give your name. Without it, your vote and comment show as "Anonymous".</span>
+      </label>
+
+      <p id="vote-error" class="error" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="vote-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-primary">▲ Submit upvote</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
