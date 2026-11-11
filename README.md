@@ -40,7 +40,7 @@ sf login
 sf publish site
 ```
 
-The first publish creates the Space and links `site/` to it; later publishes update it.
+`site/sf.jsonc` points at the existing Space, https://lively-dune.space.fast/, so this publishes a new version of it.
 
 ## Run locally
 
