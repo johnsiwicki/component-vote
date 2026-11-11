@@ -1,0 +1,7 @@
+{
+  "$schema": "https://spacefast.com/schemas/sf.json",
+  "name": "Component Vote",
+  // handler.js answers every request that no file in this folder answers (the /api routes).
+  // Spacefast gives it the Space's database as env.DB.
+  "runtime": { "kind": "functions", "entry": "handler.js" }
+}

@@ -12,7 +12,27 @@
     <p>Upvote the components you want to see shipped, and tell us why.</p>
   </header>
 
+  <p id="notice" class="notice" role="status" hidden></p>
   <main id="components" class="grid" aria-live="polite"></main>
+
+  <dialog id="detail-dialog" aria-labelledby="detail-name">
+    <header class="detail-head">
+      <div>
+        <h2 id="detail-name"></h2>
+        <p id="detail-description" class="description"></p>
+      </div>
+      <button type="button" id="detail-close" class="btn btn-ghost" aria-label="Close">✕</button>
+    </header>
+    <iframe id="detail-preview" class="preview detail-preview" sandbox="allow-scripts" title="Live preview"></iframe>
+    <div class="code-bar">
+      <div id="code-tabs" class="tabs" role="tablist" aria-label="Source code"></div>
+      <button type="button" id="code-copy" class="btn btn-ghost btn-small">Copy</button>
+    </div>
+    <pre id="code-view" class="code" role="tabpanel" tabindex="0"><code></code></pre>
+    <footer class="actions detail-actions">
+      <button type="button" id="detail-vote" class="btn btn-primary"></button>
+    </footer>
+  </dialog>
 
   <dialog id="vote-dialog">
     <form id="vote-form" method="dialog" novalidate>

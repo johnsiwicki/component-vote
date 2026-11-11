@@ -1,0 +1,28 @@
+{
+  "components": [
+    {
+      "id": "pill-button",
+      "name": "Pill Button",
+      "description": "Rounded call-to-action button with a hover lift.",
+      "html": "<button class=\"pill\">Get started</button>\n",
+      "css": ".pill {\n  padding: 12px 28px;\n  border: 0;\n  border-radius: 999px;\n  background: #4f46e5;\n  color: #fff;\n  font: 600 16px system-ui, sans-serif;\n  cursor: pointer;\n  transition: transform 0.15s, box-shadow 0.15s;\n}\n.pill:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgb(79 70 229 / 0.35); }\n",
+      "js": ""
+    },
+    {
+      "id": "profile-card",
+      "name": "Profile Card",
+      "description": "Compact card with avatar, name, role and a follow button.",
+      "html": "<div class=\"profile\">\n  <div class=\"avatar\">AK</div>\n  <div>\n    <strong>Alex Kim</strong>\n    <span>Product Designer</span>\n  </div>\n  <button type=\"button\">Follow</button>\n</div>\n",
+      "css": ".profile { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border: 1px solid #dde1e9; border-radius: 14px; font: 15px system-ui, sans-serif; color: #1c2030; }\n.avatar { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: #fde68a; font-weight: 700; }\n.profile strong, .profile span { display: block; }\n.profile span { color: #626a7d; font-size: 13px; }\n.profile button { margin-left: 12px; padding: 6px 14px; border: 1px solid #4f46e5; border-radius: 8px; background: #fff; color: #4f46e5; font: inherit; font-weight: 600; cursor: pointer; }\n.profile button.following { background: #4f46e5; color: #fff; }\n",
+      "js": "const button = document.querySelector('.profile button');\nbutton.addEventListener('click', () => {\n  const following = button.classList.toggle('following');\n  button.textContent = following ? 'Following' : 'Follow';\n});\n"
+    },
+    {
+      "id": "toggle-switch",
+      "name": "Toggle Switch",
+      "description": "Accessible on/off switch with a status label.",
+      "html": "<label class=\"toggle\">\n  <input type=\"checkbox\" role=\"switch\">\n  <span class=\"track\"></span>\n  <span class=\"state\">Off</span>\n</label>\n",
+      "css": ".toggle { display: inline-flex; align-items: center; gap: 10px; font: 16px system-ui, sans-serif; color: #1c2030; cursor: pointer; }\n.toggle input { position: absolute; opacity: 0; }\n.track { width: 48px; height: 28px; border-radius: 999px; background: #c5cad6; position: relative; transition: background 0.2s; }\n.track::after { content: \"\"; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: transform 0.2s; }\n.toggle input:checked + .track { background: #16a34a; }\n.toggle input:checked + .track::after { transform: translateX(20px); }\n.toggle input:focus-visible + .track { outline: 2px solid #4f46e5; outline-offset: 2px; }\n",
+      "js": "const input = document.querySelector('.toggle input');\nconst state = document.querySelector('.toggle .state');\ninput.addEventListener('change', () => {\n  state.textContent = input.checked ? 'On' : 'Off';\n});\n"
+    }
+  ]
+}

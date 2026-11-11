@@ -1,15 +1,57 @@
 # component-vote
 
-A simple voting board for HTML/CSS/JS components. People upvote a component,
-say which team they're on, and can leave a comment. Giving a name is optional.
+A simple voting board for HTML/CSS/JS components, hosted on [Spacefast](https://spacefast.com/docs/).
+People upvote a component, say which team they're on, and can leave a comment.
+Giving a name is optional. Clicking a component opens a live preview with its
+HTML, CSS and JS source.
 
-## Run
+## Layout
 
-```bash
-npm start
+```
+components/            one folder per component (the source of truth)
+site/                  what gets published to Spacefast
+  index.html, style.css, app.js   the page
+  components.json      generated from components/ (commit it)
+  handler.js           Spacefast Functions worker: the /api routes
+  sf.jsonc             Spacefast config
+dev-server.js          local stand-in for Spacefast
 ```
 
-Then open http://localhost:3000 (set `PORT` to change it). No dependencies to install; needs Node 18+.
+## Where the votes are stored
+
+In the Space's own database on Spacefast. `site/handler.js` runs as a
+[Functions](https://spacefast.com/docs/functions/) worker and reaches the
+[database](https://spacefast.com/docs/database/) through `env.DB`. There is no
+connection string to configure. The worker creates its one table, `votes`, on
+first use. To look at the rows, open the Space's **Database** page in the
+Spacefast dashboard, or run `sf db console`.
+
+## Publish to Spacefast
+
+```bash
+npm install -g spacefast
+```
+
+```bash
+sf login
+```
+
+```bash
+sf publish site
+```
+
+The first publish creates the Space and links `site/` to it; later publishes update it.
+
+## Run locally
+
+```bash
+npm run dev
+```
+
+Then open http://localhost:3000 (set `PORT` to change it). Needs Node 22.5+, no
+dependencies. Locally the worker runs against a SQLite file at
+`data/votes.sqlite` instead of the Spacefast database, so local votes never
+reach the live board.
 
 ## Add a component
 
@@ -23,13 +65,18 @@ components/my-widget/
   meta.json    # optional: { "name": "My Widget", "description": "..." }
 ```
 
-It appears on the board on the next page load. Each component is previewed in a
-sandboxed iframe, so its CSS and JS can't affect the page or other components.
+Then regenerate the bundle the page loads, commit, and publish:
+
+```bash
+npm run components
+```
+
+Each component is previewed in a sandboxed iframe, so its CSS and JS can't
+affect the page or other components.
 
 ## How voting works
 
 - **Team** is required, **comment** and **name** are optional. Votes without a name show as "Anonymous".
-- Votes are stored in `data/votes.json` (git-ignored; override with `DATA_FILE`).
 - There are no accounts. A browser is stopped from voting twice for the same
   component via `localStorage`, which is a courtesy guard and not tamper-proof.
 
