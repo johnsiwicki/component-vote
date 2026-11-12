@@ -80,13 +80,12 @@ function renderCard(c) {
   upvote.setAttribute('aria-label', voted ? `You upvoted ${c.name}. ${c.votes} votes` : `Upvote ${c.name}. ${c.votes} votes`);
   upvote.addEventListener('click', () => openVote(c));
 
-  // The card preview is display-only; clicking it opens the full-screen editor.
+  // The preview is live: it is not wrapped in a link, so clicks and typing reach the component.
   const href = `#/c/${encodeURIComponent(c.id)}`;
-  const frame = el('iframe', { className: 'preview', title: `${c.name} preview`, loading: 'lazy', tabIndex: -1 });
+  const frame = el('iframe', { className: 'preview', title: `${c.name} preview`, loading: 'lazy' });
   frame.setAttribute('sandbox', 'allow-scripts');
   frame.srcdoc = previewDoc(c);
-  const open = el('a', { className: 'open', href }, frame, el('span', { className: 'open-hint', textContent: 'Open editor' }));
-  open.setAttribute('aria-label', `Open ${c.name} full screen with its HTML, CSS and JS`);
+  const openLink = el('a', { className: 'open-link', href, textContent: 'Open full screen and view code →' });
 
   const body = el(
     'div',
@@ -132,7 +131,8 @@ function renderCard(c) {
     );
   }
 
-  return el('article', { className: 'card' }, open, body);
+  body.append(openLink);
+  return el('article', { className: 'card' }, frame, body);
 }
 
 function renderBoard() {
