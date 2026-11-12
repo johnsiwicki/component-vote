@@ -13,7 +13,10 @@
         <h1>Component Vote</h1>
         <p>Upvote the components you want to see shipped, and tell us why.</p>
       </div>
-      <a class="btn btn-primary" href="#/new">+ New component</a>
+      <nav class="header-actions">
+        <a class="btn btn-ghost" href="#/results">Results</a>
+        <a class="btn btn-primary" href="#/new">+ New component</a>
+      </nav>
     </header>
 
     <p id="notice" class="notice" role="status" hidden></p>
@@ -29,7 +32,8 @@
         <p id="pen-meta"></p>
       </div>
       <button type="button" id="pen-reset" class="btn btn-ghost btn-small">Reset</button>
-      <button type="button" id="pen-save" class="btn btn-ghost btn-small"></button>
+      <button type="button" id="pen-update" class="btn btn-ghost btn-small">Save changes</button>
+      <button type="button" id="pen-save" class="btn btn-ghost btn-small">Save as new</button>
       <button type="button" id="pen-vote" class="btn btn-primary btn-small"></button>
     </header>
 
@@ -58,9 +62,31 @@
     <iframe id="pen-preview" sandbox="allow-scripts" title="Live result"></iframe>
   </section>
 
+  <section id="results" aria-labelledby="results-title" hidden>
+    <header class="pen-bar">
+      <a class="btn btn-ghost btn-small" href="#/">← All components</a>
+      <h2 id="results-title">Results</h2>
+    </header>
+    <div class="results-body">
+      <div id="results-stats" class="results-stats"></div>
+      <p id="results-empty" class="empty" hidden>No votes yet. Results appear here once people start upvoting.</p>
+
+      <h3>Ranking</h3>
+      <ol id="results-ranking" class="ranking"></ol>
+
+      <h3>Votes by team</h3>
+      <ul id="results-teams" class="team-bars"></ul>
+      <p id="results-teams-empty" class="empty" hidden>No team has voted yet.</p>
+
+      <h3>Recent comments</h3>
+      <ul id="results-comments" class="recent"></ul>
+      <p id="results-comments-empty" class="empty" hidden>No comments yet.</p>
+    </div>
+  </section>
+
   <dialog id="save-dialog">
     <form id="save-form" class="dialog-form" method="dialog" novalidate>
-      <h2>Add this component</h2>
+      <h2 id="save-title">Add this component</h2>
 
       <label class="field">
         <span class="label-row">
@@ -90,7 +116,7 @@
 
       <div class="actions">
         <button type="button" id="save-cancel" class="btn btn-ghost">Cancel</button>
-        <button type="submit" class="btn btn-primary">Add component</button>
+        <button type="submit" id="save-submit" class="btn btn-primary">Add component</button>
       </div>
     </form>
   </dialog>

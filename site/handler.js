@@ -1,7 +1,7 @@
 // Spacefast Functions worker. Static files in this folder are served first;
-// everything else (the /api routes) lands here. Votes and the components people
-// add live in the Space's own
-// database, reached through env.DB (https://spacefast.com/docs/database/).
+// everything else (the /api routes) lands here. Votes, the components people
+// add, and the history of their edits live in the Space's own database,
+// reached through env.DB (https://spacefast.com/docs/database/).
 
 const LIMITS = { team: 60, name: 60, comment: 1000, title: 80, description: 300, code: 50_000 };
 const COMPONENT_ID = /^[a-z0-9][a-z0-9_-]{0,99}$/i;
@@ -16,7 +16,8 @@ const CREATE_TABLE = `CREATE TABLE IF NOT EXISTS votes (
   created_at VARCHAR(30) NOT NULL
 )`;
 
-// Components people add from the page. The starter set ships as components.json.
+// Components people add from the page. The starter set ships as components.json,
+// and a starter component gets a row here the first time it is edited.
 const CREATE_COMPONENTS = `CREATE TABLE IF NOT EXISTS components (
   id VARCHAR(100) PRIMARY KEY,
   name VARCHAR(80) NOT NULL,
@@ -28,13 +29,27 @@ const CREATE_COMPONENTS = `CREATE TABLE IF NOT EXISTS components (
   created_at VARCHAR(30) NOT NULL
 )`;
 
+// Every edit copies the row it replaces here first, so a bad edit can be undone.
+const CREATE_HISTORY = `CREATE TABLE IF NOT EXISTS component_versions (
+  id VARCHAR(36) PRIMARY KEY,
+  component_id VARCHAR(100) NOT NULL,
+  name VARCHAR(80) NOT NULL,
+  description VARCHAR(300) NOT NULL,
+  author VARCHAR(60) NOT NULL,
+  html MEDIUMTEXT NOT NULL,
+  css MEDIUMTEXT NOT NULL,
+  js MEDIUMTEXT NOT NULL,
+  saved_at VARCHAR(30) NOT NULL
+)`;
+
 const tableReady = new WeakMap();
 function ensureTable(db) {
   if (!tableReady.has(db)) {
     const pending = db
       .prepare(CREATE_TABLE)
       .run()
-      .then(() => db.prepare(CREATE_COMPONENTS).run());
+      .then(() => db.prepare(CREATE_COMPONENTS).run())
+      .then(() => db.prepare(CREATE_HISTORY).run());
     tableReady.set(db, pending);
     pending.catch(() => tableReady.delete(db)); // retry on the next request
   }
@@ -89,6 +104,31 @@ async function readJson(request, maxLength) {
   }
 }
 
+// Checks the fields a component is made of. Used for both adding and editing.
+function readComponentFields(body) {
+  const name = clean(body.name, LIMITS.title);
+  if (!name) return { error: 'Give the component a name' };
+
+  const code = {};
+  for (const key of ['html', 'css', 'js']) {
+    const value = typeof body[key] === 'string' ? body[key] : '';
+    if (value.length > LIMITS.code) {
+      return { error: `The ${key.toUpperCase()} is too long (limit ${LIMITS.code.toLocaleString('en-US')} characters)` };
+    }
+    code[key] = value;
+  }
+  if (!code.html.trim()) return { error: 'The HTML cannot be empty' };
+
+  return {
+    fields: {
+      name,
+      description: clean(body.description, LIMITS.description),
+      author: clean(body.author, LIMITS.name), // optional: empty means anonymous
+      ...code,
+    },
+  };
+}
+
 function toComponent(row) {
   return {
     id: row.id,
@@ -112,27 +152,14 @@ async function listComponents(db) {
 async function addComponent(request, db) {
   const { body, error } = await readJson(request, 200_000);
   if (error) return error;
+  const parsed = readComponentFields(body);
+  if (parsed.error) return json({ error: parsed.error }, 400);
 
-  const name = clean(body.name, LIMITS.title);
-  if (!name) return json({ error: 'Give the component a name' }, 400);
-
-  const code = {};
-  for (const key of ['html', 'css', 'js']) {
-    const value = typeof body[key] === 'string' ? body[key] : '';
-    if (value.length > LIMITS.code) {
-      return json({ error: `The ${key.toUpperCase()} is too long (limit ${LIMITS.code.toLocaleString('en-US')} characters)` }, 400);
-    }
-    code[key] = value;
-  }
-  if (!code.html.trim()) return json({ error: 'The HTML cannot be empty' }, 400);
-
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'component';
+  const f = parsed.fields;
+  const slug = f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'component';
   const row = {
     id: `${slug}-${crypto.randomUUID().slice(0, 6)}`,
-    name,
-    description: clean(body.description, LIMITS.description),
-    author: clean(body.author, LIMITS.name), // optional: empty means anonymous
-    ...code,
+    ...f,
     created_at: new Date().toISOString(),
   };
   await db
@@ -140,6 +167,41 @@ async function addComponent(request, db) {
     .bind(row.id, row.name, row.description, row.author, row.html, row.css, row.js, row.created_at)
     .run();
   return json({ component: toComponent(row) }, 201);
+}
+
+// Replaces a component's code and details. Votes and comments stay attached.
+// The previous version is kept in component_versions. The author never changes
+// on edit: whoever first added the component keeps the credit.
+async function saveComponent(request, db, id) {
+  if (!COMPONENT_ID.test(id)) return json({ error: 'Unknown component' }, 404);
+  const { body, error } = await readJson(request, 200_000);
+  if (error) return error;
+  const parsed = readComponentFields(body);
+  if (parsed.error) return json({ error: parsed.error }, 400);
+  const f = parsed.fields;
+
+  const existing = (await db.prepare('SELECT * FROM components WHERE id = ?').bind(id).all()).results[0];
+  const now = new Date().toISOString();
+
+  if (existing) {
+    await db
+      .prepare('INSERT INTO component_versions (id, component_id, name, description, author, html, css, js, saved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .bind(crypto.randomUUID(), id, existing.name, existing.description, existing.author, existing.html, existing.css, existing.js, now)
+      .run();
+    await db
+      .prepare('UPDATE components SET name = ?, description = ?, html = ?, css = ?, js = ? WHERE id = ?')
+      .bind(f.name, f.description, f.html, f.css, f.js, id)
+      .run();
+    const row = { id, ...f, author: existing.author, created_at: existing.created_at };
+    return json({ component: toComponent(row) });
+  }
+
+  // First edit of a starter component: this row overrides its copy in components.json.
+  await db
+    .prepare('INSERT INTO components (id, name, description, author, html, css, js, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .bind(id, f.name, f.description, f.author, f.html, f.css, f.js, now)
+    .run();
+  return json({ component: toComponent({ id, ...f, created_at: now }) });
 }
 
 async function castVote(request, db, componentId) {
@@ -174,7 +236,8 @@ export default {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
     const voteMatch = pathname.match(/^\/api\/components\/([^/]+)\/votes$/);
-    const known = pathname === '/api/votes' || pathname === '/api/components' || voteMatch;
+    const componentMatch = pathname.match(/^\/api\/components\/([^/]+)$/);
+    const known = pathname === '/api/votes' || pathname === '/api/components' || voteMatch || componentMatch;
     if (!known) return json({ error: 'Not found' }, 404);
 
     try {
@@ -182,6 +245,10 @@ export default {
       if (voteMatch) {
         if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
         return await castVote(request, env.DB, decodeURIComponent(voteMatch[1]));
+      }
+      if (componentMatch) {
+        if (request.method !== 'PUT') return json({ error: 'Method not allowed' }, 405);
+        return await saveComponent(request, env.DB, decodeURIComponent(componentMatch[1]));
       }
       if (pathname === '/api/components') {
         if (request.method === 'POST') return await addComponent(request, env.DB);

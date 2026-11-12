@@ -4,6 +4,7 @@ const notice = $('notice');
 const board = $('board');
 const penEl = $('pen');
 const penPreview = $('pen-preview');
+const resultsEl = $('results');
 const voteDialog = $('vote-dialog');
 const voteForm = $('vote-form');
 const saveDialog = $('save-dialog');
@@ -21,10 +22,11 @@ const STARTER = {
 };
 
 let builtIn = []; // starter components from components.json
-let submitted = []; // components people added, from the database
+let submitted = []; // components added or edited on the page, from the database
 let tally = { components: {}, teams: [] }; // votes, from the database
 let voteTargetId = null;
 let pen = null; // { component | null, base: { html, css, js } } while the editor is open
+let saveMode = 'create'; // 'create' (add or save as new) | 'edit' (save changes to the open component)
 
 function store(key, value) {
   try {
@@ -47,8 +49,10 @@ function el(tag, props = {}, ...children) {
 
 const EMPTY = { votes: 0, teams: {}, comments: [] };
 function components() {
-  const ids = new Set(builtIn.map((c) => c.id));
-  return [...builtIn, ...submitted.filter((c) => !ids.has(c.id))]
+  // A component saved from the page replaces the starter copy with the same id.
+  const byId = new Map(builtIn.map((c) => [c.id, c]));
+  for (const c of submitted) byId.set(c.id, c);
+  return [...byId.values()]
     .map((c) => ({ ...c, ...(tally.components[c.id] || EMPTY) }))
     .sort((a, b) => b.votes - a.votes || a.name.localeCompare(b.name));
 }
@@ -141,6 +145,77 @@ function renderBoard() {
   grid.replaceChildren(...all.map(renderCard));
 }
 
+/* ---- Results ---- */
+
+function barRow(label, count, max) {
+  const bar = el('div', { className: 'bar' });
+  bar.append(el('span'));
+  bar.firstChild.style.width = `${max ? (count / max) * 100 : 0}%`;
+  return el('li', {}, el('span', { textContent: label }), bar, el('strong', { textContent: String(count) }));
+}
+
+function renderResults() {
+  const all = components();
+  const totalVotes = all.reduce((n, c) => n + c.votes, 0);
+  const totalComments = all.reduce((n, c) => n + c.comments.length, 0);
+
+  const stat = (value, label) => el('div', { className: 'stat' }, el('strong', { textContent: String(value) }), el('span', { textContent: label }));
+  $('results-stats').replaceChildren(
+    stat(all.length, 'components'),
+    stat(totalVotes, 'upvotes'),
+    stat(tally.teams.length, 'teams'),
+    stat(totalComments, 'comments')
+  );
+  $('results-empty').hidden = totalVotes > 0;
+
+  const max = Math.max(1, ...all.map((c) => c.votes));
+  $('results-ranking').replaceChildren(
+    ...all.map((c, i) => {
+      const top = Object.entries(c.teams).sort((a, b) => b[1] - a[1])[0];
+      const bar = el('div', { className: 'bar' });
+      bar.append(el('span'));
+      bar.firstChild.style.width = `${(c.votes / max) * 100}%`;
+      const notes = `${c.comments.length} comment${c.comments.length === 1 ? '' : 's'}${top ? ` · top team: ${top[0]}` : ''}`;
+      return el(
+        'li',
+        { className: 'rank-row' },
+        el('span', { className: 'rank', textContent: `#${i + 1}` }),
+        el(
+          'div',
+          { className: 'rank-main' },
+          el('a', { className: 'rank-name', href: `#/c/${encodeURIComponent(c.id)}`, textContent: c.name }),
+          bar,
+          el('small', { textContent: notes })
+        ),
+        el('strong', { className: 'rank-votes', textContent: `▲ ${c.votes}` })
+      );
+    })
+  );
+
+  const byTeam = {};
+  for (const c of all) for (const [team, n] of Object.entries(c.teams)) byTeam[team] = (byTeam[team] || 0) + n;
+  const teamRows = Object.entries(byTeam).sort((a, b) => b[1] - a[1]);
+  const maxTeam = Math.max(1, ...teamRows.map(([, n]) => n));
+  $('results-teams').replaceChildren(...teamRows.map(([team, n]) => barRow(team, n, maxTeam)));
+  $('results-teams-empty').hidden = teamRows.length > 0;
+
+  const recent = all
+    .flatMap((c) => c.comments.map((m) => ({ ...m, component: c })))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 10);
+  $('results-comments').replaceChildren(
+    ...recent.map((m) =>
+      el(
+        'li',
+        {},
+        el('p', { textContent: m.comment }),
+        el('span', { className: 'by', textContent: `${m.name || 'Anonymous'} · ${m.team} · on ${m.component.name}` })
+      )
+    )
+  );
+  $('results-comments-empty').hidden = recent.length > 0;
+}
+
 /* ---- Full-screen editor ---- */
 
 const editors = {};
@@ -207,11 +282,12 @@ function updatePenBar() {
   $('pen-meta').textContent = !c
     ? 'Write some HTML, CSS and JS, then add it to the board.'
     : dirty
-      ? 'You are trying out changes. They are not saved unless you save them as a new component.'
-      : c.description || 'Edit the code to try changes live.';
+      ? 'Unsaved changes. "Save changes" updates it for everyone; "Save as new" keeps the original too.'
+      : c.description || 'Edit the code, then save your changes for everyone.';
   $('pen-reset').hidden = !dirty;
-  $('pen-save').textContent = c ? 'Save as new component' : 'Add to board';
-  $('pen-save').hidden = Boolean(c) && !dirty;
+  $('pen-update').hidden = !c;
+  $('pen-save').hidden = c ? !dirty : false;
+  $('pen-save').textContent = c ? 'Save as new' : 'Add to board';
   $('pen-vote').hidden = !c;
   if (c) {
     const voted = hasVoted(c.id);
@@ -234,6 +310,7 @@ function openPen(component) {
   const base = component ? { html: component.html, css: component.css, js: component.js } : STARTER;
   pen = { component, base };
   board.hidden = true;
+  resultsEl.hidden = true;
   penEl.hidden = false;
   setTab('html');
   setCode(component ? base : store(DRAFT_KEY) || base);
@@ -248,8 +325,21 @@ function closePen() {
   clearTimeout(previewTimer);
   penPreview.srcdoc = '';
   penEl.hidden = true;
+  resultsEl.hidden = true;
   board.hidden = false;
   document.title = 'Component Vote';
+}
+
+function openResults() {
+  pen = null;
+  clearTimeout(previewTimer);
+  penPreview.srcdoc = '';
+  penEl.hidden = true;
+  board.hidden = true;
+  resultsEl.hidden = false;
+  renderResults();
+  document.title = 'Results · Component Vote';
+  window.scrollTo(0, 0);
 }
 
 $('pen-reset').addEventListener('click', () => {
@@ -260,12 +350,13 @@ $('pen-reset').addEventListener('click', () => {
 });
 $('pen-vote').addEventListener('click', () => openVote(find(pen.component.id)));
 
-// #/c/<id> opens a component, #/new starts a blank one, anything else is the board.
+// #/c/<id> opens a component, #/new starts a blank one, #/results shows the results, anything else is the board.
 function route() {
   const match = location.hash.match(/^#\/c\/(.+)$/);
   const component = match && find(decodeURIComponent(match[1]));
   if (component) openPen(component);
   else if (location.hash === '#/new') openPen(null);
+  else if (location.hash === '#/results') openResults();
   else closePen();
 }
 window.addEventListener('hashchange', route);
@@ -278,14 +369,14 @@ function showError(form, message) {
   box.hidden = !message;
 }
 
-async function postJson(url, body, fallbackMessage) {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+async function sendJson(method, url, body, fallbackMessage) {
+  const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || fallbackMessage);
   return data;
 }
 
-// Wires a dialog's form: validates one required field, posts, and reports errors inline.
+// Wires a dialog's form: validates one required field, sends, and reports errors inline.
 function handleSubmit(form, requiredField, requiredMessage, send) {
   form[requiredField].addEventListener('input', () => showError(form, ''));
   form.addEventListener('submit', async (event) => {
@@ -328,7 +419,8 @@ $('vote-cancel').addEventListener('click', () => voteDialog.close());
 
 handleSubmit(voteForm, 'team', 'Please tell us which team you are on.', async () => {
   const team = voteForm.team.value.trim();
-  tally = await postJson(
+  tally = await sendJson(
+    'POST',
     `/api/components/${encodeURIComponent(voteTargetId)}/votes`,
     { team, name: voteForm.name.value, comment: voteForm.comment.value },
     'Could not save your vote.'
@@ -340,24 +432,58 @@ handleSubmit(voteForm, 'team', 'Please tell us which team you are on.', async ()
   if (pen) updatePenBar();
 });
 
-$('pen-save').addEventListener('click', () => {
+// One dialog covers both "add or save as new" and "save changes to this component".
+function openSaveDialog(mode) {
+  saveMode = mode;
   saveForm.reset();
   showError(saveForm, '');
-  if (pen.component) saveForm.name.value = `${pen.component.name} remix`.slice(0, 80);
-  saveForm.author.value = (store(PROFILE_KEY) || {}).name || '';
+  const c = pen.component;
+  const editing = mode === 'edit';
+  $('save-title').textContent = editing ? `Save changes to ${c.name}` : c ? 'Save as new component' : 'Add this component';
+  $('save-submit').textContent = editing ? 'Save changes' : 'Add component';
+  // An edit never changes who added the component, so the author field is only for new ones.
+  saveForm.author.closest('label').hidden = editing;
+  if (editing) {
+    saveForm.name.value = c.name;
+    saveForm.description.value = c.description || '';
+  } else {
+    saveForm.name.value = c ? `${c.name} remix`.slice(0, 80) : '';
+    saveForm.author.value = (store(PROFILE_KEY) || {}).name || '';
+  }
   saveDialog.showModal();
   saveForm.name.focus();
   saveForm.name.select();
-});
+}
+$('pen-save').addEventListener('click', () => openSaveDialog('create'));
+$('pen-update').addEventListener('click', () => openSaveDialog('edit'));
 $('save-cancel').addEventListener('click', () => saveDialog.close());
 
 handleSubmit(saveForm, 'name', 'Please give the component a name.', async () => {
+  const fields = {
+    name: saveForm.name.value,
+    description: saveForm.description.value,
+    author: saveForm.author.value,
+    ...currentCode(),
+  };
+
+  if (saveMode === 'edit') {
+    const { component } = await sendJson(
+      'PUT',
+      `/api/components/${encodeURIComponent(pen.component.id)}`,
+      fields,
+      'Could not save your changes.'
+    );
+    submitted = submitted.filter((s) => s.id !== component.id).concat(component);
+    pen.component = component;
+    pen.base = currentCode();
+    saveDialog.close();
+    renderBoard();
+    updatePenBar();
+    return;
+  }
+
   const wasNew = !pen.component;
-  const { component } = await postJson(
-    '/api/components',
-    { name: saveForm.name.value, description: saveForm.description.value, author: saveForm.author.value, ...currentCode() },
-    'Could not add the component.'
-  );
+  const { component } = await sendJson('POST', '/api/components', fields, 'Could not add the component.');
   submitted.push(component);
   if (wasNew) store(DRAFT_KEY, null);
   store(PROFILE_KEY, { ...(store(PROFILE_KEY) || {}), name: saveForm.author.value.trim() });

@@ -231,3 +231,33 @@ dialog::backdrop { background: rgb(0 0 0 / 0.45); }
   #pen[data-tab="result"] .pen-editors { display: none; }
   #pen[data-tab="result"] #pen-preview { display: block; }
 }
+
+/* Header actions and the results page. */
+.header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#results { position: fixed; inset: 0; display: flex; flex-direction: column; overflow: auto; background: var(--bg); }
+#results .pen-bar h2 { margin: 0; font-size: 1.05rem; }
+.results-body { width: 100%; max-width: 860px; margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+.results-body h3 { margin: 16px 0 0; font-size: 1rem; }
+.results-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.stat { display: grid; gap: 2px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.stat strong { font-size: 1.6rem; }
+.stat span { color: var(--muted); font-size: 0.85rem; }
+.ranking, .team-bars, .recent { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.rank-row { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.rank { color: var(--muted); font-weight: 700; }
+.rank-main { min-width: 0; }
+.rank-name { font-weight: 600; color: var(--text); text-decoration: none; }
+.rank-name:hover { color: var(--accent); text-decoration: underline; }
+.rank-main small { color: var(--muted); }
+.rank-votes { color: var(--accent); white-space: nowrap; }
+.bar { height: 8px; margin: 6px 0; border-radius: 999px; background: var(--accent-soft); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.team-bars li { display: grid; grid-template-columns: minmax(90px, 180px) 1fr auto; gap: 12px; align-items: center; }
+.team-bars .bar { margin: 0; }
+.recent li { padding: 10px 12px; border-left: 3px solid var(--border); background: var(--surface); border-radius: 8px; }
+.recent p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.recent .by { color: var(--muted); font-size: 0.8rem; }
+@media (max-width: 600px) {
+  .team-bars li { grid-template-columns: 1fr auto; }
+  .team-bars .bar { grid-column: 1 / -1; }
+}
