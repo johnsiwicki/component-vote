@@ -3,14 +3,16 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import { createLocalDb, createServer } from '../dev-server.js';
 import { OUTPUT, render } from '../scripts/build-components.js';
+import '../site/highlight.js';
 
 const server = createServer(createLocalDb(':memory:'));
 let base;
 test.before(() => new Promise((r) => server.listen(0, () => ((base = `http://localhost:${server.address().port}`), r()))));
 test.after(() => server.close());
 
-const vote = (id, body) =>
-  fetch(`${base}/api/components/${id}/votes`, { method: 'POST', body: JSON.stringify(body) });
+const post = (path, body, type = 'application/json') =>
+  fetch(base + path, { method: 'POST', headers: { 'Content-Type': type }, body: typeof body === 'string' ? body : JSON.stringify(body) });
+const vote = (id, body) => post(`/api/components/${id}/votes`, body);
 
 test('site/components.json is up to date (run `npm run components`)', () => {
   assert.strictEqual(fs.readFileSync(OUTPUT, 'utf8'), render());
@@ -49,8 +51,42 @@ test('team names tally case-insensitively and votes persist', async () => {
 
 test('rejects bad input', async () => {
   assert.strictEqual((await vote('bad%20id!', { team: 'X' })).status, 404);
-  assert.strictEqual((await fetch(`${base}/api/components/pill-button/votes`, { method: 'POST', body: '{nope' })).status, 400);
+  assert.strictEqual((await post('/api/components/pill-button/votes', '{nope')).status, 400);
+  // A cross-origin page can only send "simple" content types without asking first.
+  assert.strictEqual((await post('/api/components/pill-button/votes', { team: 'X' }, 'text/plain')).status, 415);
   assert.strictEqual((await fetch(`${base}/api/components/pill-button/votes`)).status, 405);
   assert.strictEqual((await fetch(`${base}/handler.js`)).status, 404);
   assert.notStrictEqual((await fetch(`${base}/..%2Fdev-server.js`)).status, 200);
+});
+
+test('people can add components, and vote on them', async () => {
+  assert.deepStrictEqual(await (await fetch(`${base}/api/components`)).json(), { components: [] });
+  assert.strictEqual((await post('/api/components', { html: '<b>x</b>' })).status, 400); // no name
+  assert.strictEqual((await post('/api/components', { name: 'Empty' })).status, 400); // no html
+  assert.strictEqual((await post('/api/components', { name: 'Big', html: 'x', js: 'y'.repeat(50_001) })).status, 400);
+
+  const res = await post('/api/components', { name: '  Fancy Badge! ', html: '<b>hi</b>', css: 'b{color:red}' });
+  assert.strictEqual(res.status, 201);
+  const { component } = await res.json();
+  assert.match(component.id, /^fancy-badge-[0-9a-f]{6}$/);
+  assert.deepStrictEqual(
+    { ...component, id: '', createdAt: '' },
+    { id: '', name: 'Fancy Badge!', description: '', author: '', html: '<b>hi</b>', css: 'b{color:red}', js: '', createdAt: '' }
+  );
+
+  const { components } = await (await fetch(`${base}/api/components`)).json();
+  assert.deepStrictEqual(components, [component]);
+
+  const voted = await (await vote(component.id, { team: 'QA' })).json();
+  assert.strictEqual(voted.components[component.id].votes, 1);
+});
+
+test('highlighter escapes markup and tags tokens', () => {
+  const h = globalThis.highlightCode;
+  assert.strictEqual(h('<b class="x">&</b>', 'html'),
+    '<span class="tok-tag">&lt;b</span> <span class="tok-attr">class</span>=<span class="tok-str">"x"</span><span class="tok-tag">&gt;</span>&amp;<span class="tok-tag">&lt;/b</span><span class="tok-tag">&gt;</span>');
+  assert.match(h('const a = "<i>"; // hi', 'js'), /tok-kw">const<.*tok-str">"&lt;i&gt;"<.*tok-comment">\/\/ hi</);
+  assert.match(h('a:hover { color: #fff; margin: 4px }', 'css'), /tok-sel">a<.*tok-sel">hover<.*tok-prop">color<.*tok-num">#fff<.*tok-prop">margin<.*tok-num">4px</);
+  assert.match(h('<style>.a{top:0}</style><script>let x = 1</script>', 'html'), /tok-prop">top<.*tok-kw">let</);
+  for (const lang of ['html', 'css', 'js']) assert.ok(!h('<img src=x onerror=alert(1)>"\'`/*', lang).includes('<img'));
 });

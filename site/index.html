@@ -7,35 +7,96 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="site-header">
-    <h1>Component Vote</h1>
-    <p>Upvote the components you want to see shipped, and tell us why.</p>
-  </header>
-
-  <p id="notice" class="notice" role="status" hidden></p>
-  <main id="components" class="grid" aria-live="polite"></main>
-
-  <dialog id="detail-dialog" aria-labelledby="detail-name">
-    <header class="detail-head">
+  <div id="board">
+    <header class="site-header">
       <div>
-        <h2 id="detail-name"></h2>
-        <p id="detail-description" class="description"></p>
+        <h1>Component Vote</h1>
+        <p>Upvote the components you want to see shipped, and tell us why.</p>
       </div>
-      <button type="button" id="detail-close" class="btn btn-ghost" aria-label="Close">✕</button>
+      <a class="btn btn-primary" href="#/new">+ New component</a>
     </header>
-    <iframe id="detail-preview" class="preview detail-preview" sandbox="allow-scripts" title="Live preview"></iframe>
-    <div class="code-bar">
-      <div id="code-tabs" class="tabs" role="tablist" aria-label="Source code"></div>
-      <button type="button" id="code-copy" class="btn btn-ghost btn-small">Copy</button>
+
+    <p id="notice" class="notice" role="status" hidden></p>
+    <main id="components" class="grid" aria-live="polite"></main>
+  </div>
+
+  <!-- Full-screen editor: code on top, live result below. -->
+  <section id="pen" data-tab="html" aria-labelledby="pen-name" hidden>
+    <header class="pen-bar">
+      <a class="btn btn-ghost btn-small" href="#/">← All components</a>
+      <div class="pen-title">
+        <h2 id="pen-name"></h2>
+        <p id="pen-meta"></p>
+      </div>
+      <button type="button" id="pen-reset" class="btn btn-ghost btn-small">Reset</button>
+      <button type="button" id="pen-save" class="btn btn-ghost btn-small"></button>
+      <button type="button" id="pen-vote" class="btn btn-primary btn-small"></button>
+    </header>
+
+    <div class="pen-tabs" role="tablist" aria-label="Panels">
+      <button type="button" class="tab" role="tab" data-tab="html">HTML</button>
+      <button type="button" class="tab" role="tab" data-tab="css">CSS</button>
+      <button type="button" class="tab" role="tab" data-tab="js">JS</button>
+      <button type="button" class="tab" role="tab" data-tab="result">Result</button>
     </div>
-    <pre id="code-view" class="code" role="tabpanel" tabindex="0"><code></code></pre>
-    <footer class="actions detail-actions">
-      <button type="button" id="detail-vote" class="btn btn-primary"></button>
-    </footer>
+
+    <div class="pen-editors">
+      <div class="pane" data-lang="html">
+        <div class="pane-head">HTML</div>
+        <div class="editor"><pre aria-hidden="true"><code></code></pre><textarea aria-label="HTML" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
+      </div>
+      <div class="pane" data-lang="css">
+        <div class="pane-head">CSS</div>
+        <div class="editor"><pre aria-hidden="true"><code></code></pre><textarea aria-label="CSS" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
+      </div>
+      <div class="pane" data-lang="js">
+        <div class="pane-head">JS</div>
+        <div class="editor"><pre aria-hidden="true"><code></code></pre><textarea aria-label="JavaScript" spellcheck="false" autocapitalize="off" autocomplete="off"></textarea></div>
+      </div>
+    </div>
+
+    <iframe id="pen-preview" sandbox="allow-scripts" title="Live result"></iframe>
+  </section>
+
+  <dialog id="save-dialog">
+    <form id="save-form" class="dialog-form" method="dialog" novalidate>
+      <h2>Add this component</h2>
+
+      <label class="field">
+        <span class="label-row">
+          <span>Component name</span>
+          <span class="tag tag-required">Required</span>
+        </span>
+        <input name="name" maxlength="80" required autocomplete="off" placeholder="e.g. Notification badge">
+      </label>
+
+      <label class="field">
+        <span class="label-row">
+          <span>Description</span>
+          <span class="tag tag-optional">Optional</span>
+        </span>
+        <input name="description" maxlength="300" autocomplete="off" placeholder="One line on what it is for">
+      </label>
+
+      <label class="field field-optional">
+        <span class="label-row">
+          <span>Your name</span>
+          <span class="tag tag-optional">Optional</span>
+        </span>
+        <input name="author" maxlength="60" autocomplete="name" placeholder="Leave blank to add it anonymously">
+      </label>
+
+      <p id="save-error" class="error" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="save-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add component</button>
+      </div>
+    </form>
   </dialog>
 
   <dialog id="vote-dialog">
-    <form id="vote-form" method="dialog" novalidate>
+    <form id="vote-form" class="dialog-form" method="dialog" novalidate>
       <h2>Upvote <span id="vote-target"></span></h2>
 
       <label class="field">
@@ -73,6 +134,7 @@
     </form>
   </dialog>
 
+  <script src="highlight.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

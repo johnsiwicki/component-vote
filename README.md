@@ -2,8 +2,12 @@
 
 A simple voting board for HTML/CSS/JS components, hosted on [Spacefast](https://spacefast.com/docs/).
 People upvote a component, say which team they're on, and can leave a comment.
-Giving a name is optional. Clicking a component opens a live preview with its
-HTML, CSS and JS source.
+Giving a name is optional.
+
+Clicking a component opens it full screen in an editor: syntax-highlighted
+HTML, CSS and JS panes with a live result underneath. Anyone can edit the code
+to try things out, save their version as a new component, or start a new one
+from scratch with **New component**.
 
 ## Layout
 
@@ -11,19 +15,21 @@ HTML, CSS and JS source.
 components/            one folder per component (the source of truth)
 site/                  what gets published to Spacefast
   index.html, style.css, app.js   the page
+  highlight.js         the syntax highlighter (no dependencies)
   components.json      generated from components/ (commit it)
   handler.js           Spacefast Functions worker: the /api routes
   sf.jsonc             Spacefast config
 dev-server.js          local stand-in for Spacefast
 ```
 
-## Where the votes are stored
+## Where the data is stored
 
-In the Space's own database on Spacefast. `site/handler.js` runs as a
+Votes, and the components people add from the page, live in the Space's own
+database on Spacefast. `site/handler.js` runs as a
 [Functions](https://spacefast.com/docs/functions/) worker and reaches the
 [database](https://spacefast.com/docs/database/) through `env.DB`. There is no
-connection string to configure. The worker creates its one table, `votes`, on
-first use. To look at the rows, open the Space's **Database** page in the
+connection string to configure. The worker creates its two tables, `votes` and
+`components`, on first use. To look at the rows, open the Space's **Database** page in the
 Spacefast dashboard, or run `sf db console`.
 
 ## Publish to Spacefast
@@ -55,7 +61,12 @@ reach the live board.
 
 ## Add a component
 
-Create a folder in `components/`:
+**From the page:** click **New component**, write the HTML, CSS and JS, and
+choose **Add to board**. It needs a name; a description and your own name are
+optional. Opening an existing component, editing it and choosing **Save as new
+component** works the same way. These are stored in the database.
+
+**From the repo** (the starter set): create a folder in `components/`:
 
 ```
 components/my-widget/
@@ -71,8 +82,14 @@ Then regenerate the bundle the page loads, commit, and publish:
 npm run components
 ```
 
-Each component is previewed in a sandboxed iframe, so its CSS and JS can't
-affect the page or other components.
+Every component runs in a sandboxed iframe, so its CSS and JS can't affect the
+page, other components, or the API.
+
+## Moderation
+
+There are no accounts, so anyone who can open the board can add a component,
+and nobody can edit or delete one from the page. To remove one, delete its row
+from the `components` table (and its rows in `votes`) in the SQL console.
 
 ## How voting works
 

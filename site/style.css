@@ -28,7 +28,8 @@ body {
   color: var(--text);
   font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
-.site-header { max-width: 1100px; margin: 0 auto; padding: 32px 16px 8px; }
+[hidden] { display: none !important; }
+.site-header { max-width: 1100px; margin: 0 auto; padding: 32px 16px 8px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: space-between; }
 .site-header h1 { margin: 0; font-size: 1.75rem; }
 .site-header p { margin: 4px 0 0; color: var(--muted); }
 
@@ -107,8 +108,8 @@ dialog {
   color: var(--text);
 }
 dialog::backdrop { background: rgb(0 0 0 / 0.45); }
-#vote-form { padding: 24px; display: grid; gap: 16px; }
-#vote-form h2 { margin: 0; font-size: 1.2rem; }
+.dialog-form { padding: 24px; display: grid; gap: 16px; }
+.dialog-form h2 { margin: 0; font-size: 1.2rem; }
 
 .field { display: grid; gap: 6px; }
 .label-row { display: flex; align-items: center; gap: 8px; font-weight: 600; }
@@ -139,6 +140,8 @@ dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 
 .actions { display: flex; justify-content: flex-end; gap: 8px; }
 .btn {
+  display: inline-block;
+  text-decoration: none;
   padding: 10px 16px;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -147,20 +150,12 @@ dialog::backdrop { background: rgb(0 0 0 / 0.45); }
   cursor: pointer;
 }
 .btn-primary { background: var(--accent); color: var(--surface); }
-.btn-primary:disabled { opacity: 0.6; cursor: wait; }
+.btn:disabled { opacity: 0.6; cursor: default; }
 .btn-ghost { background: transparent; border-color: var(--border); color: var(--text); }
 
-/* Card preview: the whole preview is one button that opens the code view. */
+/* Card preview: the whole preview is one link that opens the full-screen editor. */
 .notice { max-width: 1100px; margin: 0 auto; padding: 0 16px; color: var(--danger); }
-.open {
-  position: relative;
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-}
+.open { position: relative; display: block; }
 .open .preview { pointer-events: none; }
 .open-hint {
   position: absolute;
@@ -174,39 +169,65 @@ dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 }
 .open:hover .open-hint, .open:focus-visible .open-hint { background: var(--accent); }
 .open:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.name-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.name-link { color: inherit; text-decoration: none; }
 .name-link:hover { color: var(--accent); text-decoration: underline; }
 
-/* Detail dialog: live preview plus HTML / CSS / JS source. */
-#detail-dialog { width: min(820px, calc(100vw - 32px)); max-height: calc(100vh - 32px); }
-#detail-dialog[open] { display: flex; flex-direction: column; }
-.detail-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 20px 24px 12px; }
-.detail-head h2 { margin: 0; font-size: 1.25rem; }
-.detail-head .description { margin: 4px 0 0; color: var(--muted); font-size: 0.9rem; }
-.detail-preview { flex: none; height: 220px; border-top: 1px solid var(--border); }
-.code-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 24px 0; }
-.tabs { display: flex; gap: 4px; }
-.tab {
-  padding: 8px 14px;
-  border: 0;
-  border-bottom: 3px solid transparent;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); }
-.btn-small { padding: 4px 12px; font-size: 0.85rem; }
-.code {
-  flex: 1 1 auto;
-  min-height: 120px;
+.btn-small { padding: 6px 12px; font-size: 0.85rem; }
+.card .added-by { margin: 8px 0 0; color: var(--muted); font-size: 0.8rem; }
+
+/* Full-screen editor. The code panes are always dark, like most editors. */
+#pen { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--bg); }
+.pen-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.pen-title { flex: 1 1 200px; min-width: 0; }
+.pen-title h2 { margin: 0; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pen-title p { margin: 0; color: var(--muted); font-size: 0.8rem; }
+.pen-tabs { display: none; background: #14151c; }
+.pen-tabs .tab { flex: 1; padding: 10px 4px; border: 0; border-bottom: 3px solid transparent; background: none; color: #9aa2b5; font: inherit; font-weight: 600; cursor: pointer; }
+.pen-tabs .tab[aria-selected="true"] { color: #fff; border-bottom-color: #8b85ff; }
+.pen-editors { flex: 0 0 44%; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: #000; }
+.pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.pane-head { padding: 6px 12px; background: #14151c; color: #9aa2b5; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; }
+.editor { position: relative; flex: 1; min-height: 0; background: #1e1f29; }
+/* A transparent textarea sits exactly on top of the highlighted copy of its text. */
+.editor pre, .editor textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
-  padding: 16px 24px;
-  overflow: auto;
-  border-top: 1px solid var(--border);
-  background: var(--bg);
-  font: 0.85rem/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 12px;
+  border: 0;
+  font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
   tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
 }
-.detail-actions { padding: 12px 24px 20px; border-top: 1px solid var(--border); }
+.editor pre { overflow: hidden; color: #d6deeb; pointer-events: none; }
+.editor code { font: inherit; }
+.editor textarea { overflow: auto; resize: none; outline: none; background: transparent; color: transparent; caret-color: #fff; }
+.editor textarea::selection { background: rgb(130 170 255 / 0.35); }
+.editor:focus-within { box-shadow: inset 0 0 0 1px #8b85ff; }
+#pen-preview { flex: 1 1 0; min-height: 0; width: 100%; border: 0; background: #fff; }
+
+.tok-comment { color: #7f8597; font-style: italic; }
+.tok-kw { color: #c792ea; }
+.tok-str { color: #c3e88d; }
+.tok-num { color: #f78c6c; }
+.tok-fn { color: #82aaff; }
+.tok-tag { color: #f07178; }
+.tok-attr, .tok-sel { color: #ffcb6b; }
+.tok-prop { color: #80cbc4; }
+
+/* Small screens: one panel at a time, picked from the tab strip. */
+@media (max-width: 800px) {
+  .pen-tabs { display: flex; }
+  .pen-editors { flex: 1 1 0; grid-template-columns: minmax(0, 1fr); }
+  .pane-head { display: none; }
+  #pen .pane, #pen #pen-preview { display: none; }
+  #pen[data-tab="html"] .pane[data-lang="html"],
+  #pen[data-tab="css"] .pane[data-lang="css"],
+  #pen[data-tab="js"] .pane[data-lang="js"] { display: flex; }
+  #pen[data-tab="result"] .pen-editors { display: none; }
+  #pen[data-tab="result"] #pen-preview { display: block; }
+}
