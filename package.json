@@ -1,0 +1,13 @@
+{
+  "name": "component-vote",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Simple upvoting for HTML/CSS/JS components, hosted on Spacefast",
+  "scripts": {
+    "dev": "node dev-server.js",
+    "components": "node scripts/build-components.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=22.5" }
+}
