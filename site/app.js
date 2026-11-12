@@ -59,12 +59,19 @@ function components() {
 const find = (id) => components().find((c) => c.id === id);
 const isSubmitted = (c) => submitted.some((s) => s.id === c.id);
 
-// Components run in a sandboxed iframe: scripts work, but they get an opaque
-// origin and cannot touch this page, its storage, or the API as the voter.
+// Components run in a sandboxed iframe: scripts, forms and alert()/confirm() work,
+// but the frame gets an opaque origin and cannot touch this page, its storage, or
+// the API as the voter (the API only accepts JSON, which a form cannot send).
+const PREVIEW_SANDBOX = 'allow-scripts allow-forms allow-modals';
+
+// Runs after the component's own script. A form that nothing handles would
+// otherwise navigate the preview to a blank page, so its submission is cancelled.
+const FORM_GUARD = "addEventListener('submit', (e) => { if (!e.defaultPrevented) e.preventDefault(); });";
+
 function previewDoc({ html, css, js }) {
   return `<!doctype html><meta charset="utf-8"><style>
     body{margin:0;min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif}
-    ${css}</style>${html}<script>${js.replace(/<\/script/gi, '<\\/script')}<\/script>`;
+    ${css}</style>${html}<script>${js.replace(/<\/script/gi, '<\\/script')}<\/script><script>${FORM_GUARD}<\/script>`;
 }
 
 /* ---- Board ---- */
@@ -83,7 +90,7 @@ function renderCard(c) {
   // The preview is live: it is not wrapped in a link, so clicks and typing reach the component.
   const href = `#/c/${encodeURIComponent(c.id)}`;
   const frame = el('iframe', { className: 'preview', title: `${c.name} preview`, loading: 'lazy' });
-  frame.setAttribute('sandbox', 'allow-scripts');
+  frame.setAttribute('sandbox', PREVIEW_SANDBOX);
   frame.srcdoc = previewDoc(c);
   const openLink = el('a', { className: 'open-link', href, textContent: 'Open full screen and view code →' });
 
