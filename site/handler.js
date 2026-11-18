@@ -5,7 +5,7 @@
 
 const LIMITS = {
   team: 60, name: 60, comment: 1000, title: 80, description: 300, code: 50_000,
-  ideaTitle: 120, ideaDescription: 1000, screenshot: 1_000_000, // screenshot: characters of data URL
+  ideaTitle: 120, ideaDescription: 1000, exampleUrl: 2000, screenshot: 1_000_000, // screenshot: characters of data URL
 };
 const COMPONENT_ID = /^[a-z0-9][a-z0-9_-]{0,99}$/i;
 
@@ -47,14 +47,21 @@ const CREATE_HISTORY = `CREATE TABLE IF NOT EXISTS component_versions (
 
 // Ideas for things to A/B test. The optional screenshot is stored as a data URL
 // ('' when there is none) and served on its own route, so listing ideas stays small.
+// example_url is an optional link to something the suggester likes ('' when none).
 const CREATE_IDEAS = `CREATE TABLE IF NOT EXISTS ideas (
   id VARCHAR(100) PRIMARY KEY,
   title VARCHAR(120) NOT NULL,
   description TEXT NOT NULL,
   author VARCHAR(60) NOT NULL,
   screenshot MEDIUMTEXT NOT NULL,
+  example_url VARCHAR(2000) NOT NULL DEFAULT '',
   created_at VARCHAR(30) NOT NULL
 )`;
+
+// Ideas tables created before example_url existed get the column added. Neither
+// MySQL nor SQLite has ADD COLUMN IF NOT EXISTS, so the "duplicate column" error
+// on an up-to-date table is expected and ignored.
+const ADD_EXAMPLE_URL = "ALTER TABLE ideas ADD COLUMN example_url VARCHAR(2000) NOT NULL DEFAULT ''";
 
 const tableReady = new WeakMap();
 function ensureTable(db) {
@@ -64,7 +71,8 @@ function ensureTable(db) {
       .run()
       .then(() => db.prepare(CREATE_COMPONENTS).run())
       .then(() => db.prepare(CREATE_HISTORY).run())
-      .then(() => db.prepare(CREATE_IDEAS).run());
+      .then(() => db.prepare(CREATE_IDEAS).run())
+      .then(() => db.prepare(ADD_EXAMPLE_URL).run().catch(() => {}));
     tableReady.set(db, pending);
     pending.catch(() => tableReady.delete(db)); // retry on the next request
   }
@@ -250,12 +258,31 @@ function readScreenshot(value) {
   return { screenshot: value };
 }
 
+// An optional link to an example. A bare domain gets https:// added; only http and
+// https links are kept, so a javascript: or data: URL can never become a link.
+function readExampleUrl(value) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  if (!text) return { exampleUrl: '' };
+  if (text.length > LIMITS.exampleUrl) return { error: 'The example link is too long' };
+  let url;
+  try {
+    url = new URL(/^[a-z][a-z0-9+.-]*:/i.test(text) ? text : `https://${text}`);
+  } catch {
+    return { error: 'The example link is not a valid web address' };
+  }
+  if ((url.protocol !== 'https:' && url.protocol !== 'http:') || !url.hostname.includes('.')) {
+    return { error: 'The example link must be a web address starting with http:// or https://' };
+  }
+  return { exampleUrl: url.href };
+}
+
 function toIdea(row) {
   return {
     id: row.id,
     title: row.title,
     description: row.description,
     author: row.author,
+    exampleUrl: row.example_url || '',
     hasScreenshot: Number(row.has_screenshot) === 1,
     createdAt: row.created_at,
   };
@@ -264,7 +291,7 @@ function toIdea(row) {
 async function listIdeas(db) {
   const { results } = await db
     .prepare(
-      "SELECT id, title, description, author, created_at, CASE WHEN screenshot = '' THEN 0 ELSE 1 END AS has_screenshot FROM ideas ORDER BY created_at"
+      "SELECT id, title, description, author, example_url, created_at, CASE WHEN screenshot = '' THEN 0 ELSE 1 END AS has_screenshot FROM ideas ORDER BY created_at"
     )
     .all();
   return { ideas: results.map(toIdea) };
@@ -278,6 +305,8 @@ async function addIdea(request, db) {
   if (!title) return json({ error: 'Say what you would like to test' }, 400);
   const description = clean(body.description, LIMITS.ideaDescription);
   if (!description) return json({ error: 'Add a short description' }, 400);
+  const example = readExampleUrl(body.exampleUrl);
+  if (example.error) return json({ error: example.error }, 400);
   const shot = readScreenshot(body.screenshot);
   if (shot.error) return json({ error: shot.error }, 400);
 
@@ -288,11 +317,12 @@ async function addIdea(request, db) {
     description,
     author: clean(body.author, LIMITS.name), // optional: empty means anonymous
     screenshot: shot.screenshot,
+    example_url: example.exampleUrl,
     created_at: new Date().toISOString(),
   };
   await db
-    .prepare('INSERT INTO ideas (id, title, description, author, screenshot, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .bind(row.id, row.title, row.description, row.author, row.screenshot, row.created_at)
+    .prepare('INSERT INTO ideas (id, title, description, author, screenshot, example_url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .bind(row.id, row.title, row.description, row.author, row.screenshot, row.example_url, row.created_at)
     .run();
   return json({ idea: toIdea({ ...row, has_screenshot: row.screenshot ? 1 : 0 }) }, 201);
 }

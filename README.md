@@ -10,7 +10,8 @@ to try things out, save their version as a new component, or start a new one
 from scratch with **New component**.
 
 **Suggest an idea** lets anyone propose something to A/B test: a short title and
-description (both required), an optional screenshot, and an optional name. Ideas
+description (both required), an optional link to an example they like, an
+optional screenshot, and an optional name. Ideas
 get upvotes and comments like components, and appear on the Results page.
 
 ## Layout

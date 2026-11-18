@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import { createLocalDb, createServer } from '../dev-server.js';
 import { OUTPUT, render } from '../scripts/build-components.js';
 import '../site/highlight.js';
+import handler from '../site/handler.js';
 
 const server = createServer(createLocalDb(':memory:'));
 let base;
@@ -137,7 +138,7 @@ test('people can suggest test ideas, with an optional screenshot', async () => {
   assert.strictEqual(plain.status, 201);
   const { idea } = await plain.json();
   assert.match(idea.id, /^idea-shorter-signup-form-[0-9a-f]{6}$/);
-  assert.deepStrictEqual({ ...idea, id: '', createdAt: '' }, { id: '', title: 'Shorter signup form', description: 'Drop the phone field', author: 'Ana', hasScreenshot: false, createdAt: '' });
+  assert.deepStrictEqual({ ...idea, id: '', createdAt: '' }, { id: '', title: 'Shorter signup form', description: 'Drop the phone field', author: 'Ana', exampleUrl: '', hasScreenshot: false, createdAt: '' });
   assert.strictEqual((await fetch(`${base}/api/ideas/${idea.id}/screenshot`)).status, 404);
 
   const withShot = await (await post('/api/ideas', { title: 'Bigger CTA', description: 'See screenshot', screenshot: PNG })).json();
@@ -168,4 +169,30 @@ test('ideas are validated', async () => {
   assert.strictEqual((await post('/api/ideas', { title: 'x', description: 'y' }, 'text/plain')).status, 415);
   assert.strictEqual((await fetch(`${base}/api/ideas/bad%20id!/screenshot`)).status, 404);
   assert.strictEqual((await fetch(`${base}/api/ideas`, { method: 'DELETE' })).status, 405);
+});
+
+test('ideas can link to an example, and only web links are accepted', async () => {
+  const bare = await (await post('/api/ideas', { title: 'Sticky CTA', description: 'Like theirs', exampleUrl: '  stripe.com/pricing ' })).json();
+  assert.strictEqual(bare.idea.exampleUrl, 'https://stripe.com/pricing');
+  const full = await (await post('/api/ideas', { title: 'Mega menu', description: 'x', exampleUrl: 'http://example.org/a?b=1#c' })).json();
+  assert.strictEqual(full.idea.exampleUrl, 'http://example.org/a?b=1#c');
+  const listed = (await (await fetch(`${base}/api/ideas`)).json()).ideas;
+  assert.strictEqual(listed.find((i) => i.id === bare.idea.id).exampleUrl, 'https://stripe.com/pricing');
+
+  for (const exampleUrl of ['javascript:alert(1)', 'data:text/html,hi', 'ftp://example.com', 'not a url', 'localhost', `https://e.com/${'a'.repeat(2000)}`]) {
+    assert.strictEqual((await post('/api/ideas', { title: 'x', description: 'y', exampleUrl })).status, 400, exampleUrl);
+  }
+});
+
+test('an ideas table from before example links is upgraded in place', async () => {
+  const db = createLocalDb(':memory:');
+  await db.prepare(`CREATE TABLE ideas (id VARCHAR(100) PRIMARY KEY, title VARCHAR(120) NOT NULL, description TEXT NOT NULL,
+    author VARCHAR(60) NOT NULL, screenshot MEDIUMTEXT NOT NULL, created_at VARCHAR(30) NOT NULL)`).run();
+  await db.prepare("INSERT INTO ideas VALUES ('idea-old-abc123', 'Old idea', 'From before', '', '', '2026-11-01T00:00:00.000Z')").run();
+  const call = (path, init) => handler.fetch(new Request(`http://local${path}`, init), { DB: db });
+
+  const { ideas } = await (await call('/api/ideas')).json();
+  assert.deepStrictEqual(ideas.map((i) => [i.title, i.exampleUrl]), [['Old idea', '']]);
+  const added = await call('/api/ideas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'New', description: 'd', exampleUrl: 'https://a.io' }) });
+  assert.strictEqual((await added.json()).idea.exampleUrl, 'https://a.io/');
 });

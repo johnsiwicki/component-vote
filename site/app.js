@@ -174,12 +174,31 @@ function renderIdea(idea) {
     'div',
     { className: 'card-body' },
     el('div', { className: 'card-head' }, el('h3', { textContent: idea.name }), upvoteButton(idea)),
-    el('p', { className: 'idea-desc', textContent: idea.description }),
-    el('p', { className: 'added-by', textContent: `Suggested by ${idea.author || 'Anonymous'}` })
+    el('p', { className: 'idea-desc', textContent: idea.description })
   );
+  if (idea.exampleUrl) body.append(exampleLink(idea.exampleUrl));
+  body.append(el('p', { className: 'added-by', textContent: `Suggested by ${idea.author || 'Anonymous'}` }));
   appendVotes(body, idea);
   card.append(body);
   return card;
+}
+
+// "Example: site.com/path" linking out. noreferrer keeps the board's address private.
+function exampleLink(href) {
+  let label = href;
+  try {
+    const url = new URL(href);
+    label = url.hostname.replace(/^www\./, '') + (url.pathname === '/' ? '' : url.pathname);
+  } catch {
+    /* the server only stores valid http(s) URLs, but show it raw if parsing ever fails */
+  }
+  if (label.length > 60) label = `${label.slice(0, 57)}…`;
+  return el(
+    'p',
+    { className: 'idea-example' },
+    'Example: ',
+    el('a', { href, target: '_blank', rel: 'noopener noreferrer nofollow', textContent: label, title: href })
+  );
 }
 
 const emptyNote = (text) => el('p', { className: 'empty', textContent: text });
@@ -628,7 +647,13 @@ handleSubmit(ideaForm, 'title', 'Please say what you would like to test.', async
   const { idea } = await sendJson(
     'POST',
     '/api/ideas',
-    { title: ideaForm.title.value, description: ideaForm.description.value, author: ideaForm.author.value, screenshot: ideaShot },
+    {
+      title: ideaForm.title.value,
+      description: ideaForm.description.value,
+      exampleUrl: ideaForm.exampleUrl.value,
+      author: ideaForm.author.value,
+      screenshot: ideaShot,
+    },
     'Could not add your idea.'
   );
   ideaList.push(idea);
