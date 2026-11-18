@@ -370,7 +370,7 @@ function openPen(component) {
   setCode(component ? base : store(DRAFT_KEY) || base);
   runPreview();
   updatePenBar();
-  document.title = `${component ? component.name : 'New component'} · Component Vote`;
+  document.title = `${component ? component.name : 'New component'} · Test Queue`;
   window.scrollTo(0, 0);
 }
 
@@ -381,7 +381,7 @@ function closePen() {
   penEl.hidden = true;
   resultsEl.hidden = true;
   board.hidden = false;
-  document.title = 'Component Vote';
+  document.title = 'Test Queue';
 }
 
 function openResults() {
@@ -392,7 +392,7 @@ function openResults() {
   board.hidden = true;
   resultsEl.hidden = false;
   renderResults();
-  document.title = 'Results · Component Vote';
+  document.title = 'Results · Test Queue';
   window.scrollTo(0, 0);
 }
 

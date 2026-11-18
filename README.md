@@ -1,8 +1,8 @@
-# component-vote
+# Test Queue
 
-A simple voting board for HTML/CSS/JS components, hosted on [Spacefast](https://spacefast.com/docs/).
-People upvote a component, say which team they're on, and can leave a comment.
-Giving a name is optional.
+A board for deciding what to A/B test next, hosted on [Spacefast](https://spacefast.com/docs/).
+People upvote HTML/CSS/JS components and suggested test ideas, say which team
+they're on, and can leave a comment. Giving a name is optional.
 
 Clicking a component opens it full screen in an editor: syntax-highlighted
 HTML, CSS and JS panes with a live result underneath. Anyone can edit the code

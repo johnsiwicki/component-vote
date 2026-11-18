@@ -378,7 +378,7 @@ export default {
       if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
       return json(await summary(env.DB));
     } catch (err) {
-      console.error('component-vote request failed', err);
+      console.error('test-queue request failed', err);
       return json({ error: 'Something went wrong. Please try again.' }, 500);
     }
   },

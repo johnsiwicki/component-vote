@@ -21,7 +21,7 @@ test('site/components.json is up to date (run `npm run components`)', () => {
 });
 
 test('serves the page and the component sources', async () => {
-  assert.match(await (await fetch(base)).text(), /Component Vote/);
+  assert.match(await (await fetch(base)).text(), /Test Queue/);
   const { components } = await (await fetch(`${base}/components.json`)).json();
   assert.ok(components.length >= 1);
   assert.ok(components.every((c) => c.id && c.html));

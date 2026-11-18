@@ -80,6 +80,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const port = Number(process.env.PORT) || 3000;
   const dbFile = process.env.DB_FILE || path.join(ROOT, 'data', 'votes.sqlite');
   createServer(createLocalDb(dbFile)).listen(port, () => {
-    console.log(`Component Vote (local dev) running at http://localhost:${port}`);
+    console.log(`Test Queue (local dev) running at http://localhost:${port}`);
   });
 }
