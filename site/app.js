@@ -10,6 +10,9 @@ const voteForm = $('vote-form');
 const saveDialog = $('save-dialog');
 const saveForm = $('save-form');
 const teamList = $('team-list');
+const ideaGrid = $('ideas');
+const ideaDialog = $('idea-dialog');
+const ideaForm = $('idea-form');
 
 const VOTED_KEY = 'component-vote:voted';
 const PROFILE_KEY = 'component-vote:profile';
@@ -23,7 +26,8 @@ const STARTER = {
 
 let builtIn = []; // starter components from components.json
 let submitted = []; // components added or edited on the page, from the database
-let tally = { components: {}, teams: [] }; // votes, from the database
+let ideaList = []; // test ideas people suggested, from the database
+let tally = { components: {}, teams: [] }; // votes on components and ideas, from the database
 let voteTargetId = null;
 let pen = null; // { component | null, base: { html, css, js } } while the editor is open
 let saveMode = 'create'; // 'create' (add or save as new) | 'edit' (save changes to the open component)
@@ -59,6 +63,13 @@ function components() {
 const find = (id) => components().find((c) => c.id === id);
 const isSubmitted = (c) => submitted.some((s) => s.id === c.id);
 
+// Ideas get a `name` so the vote dialog and results can treat them like components.
+function ideas() {
+  return ideaList
+    .map((i) => ({ ...i, name: i.title, ...(tally.components[i.id] || EMPTY) }))
+    .sort((a, b) => b.votes - a.votes || b.createdAt.localeCompare(a.createdAt));
+}
+
 // Components run in a sandboxed iframe: scripts, forms and alert()/confirm() work,
 // but the frame gets an opaque origin and cannot touch this page, its storage, or
 // the API as the voter (the API only accepts JSON, which a form cannot send).
@@ -76,46 +87,25 @@ function previewDoc({ html, css, js }) {
 
 /* ---- Board ---- */
 
-function renderCard(c) {
+function upvoteButton(c) {
   const voted = hasVoted(c.id);
-  const upvote = el(
+  const button = el(
     'button',
     { className: `upvote${voted ? ' voted' : ''}`, type: 'button', disabled: voted },
     el('span', { textContent: `▲ ${c.votes}` }),
     el('small', { textContent: voted ? 'Voted' : 'Upvote' })
   );
-  upvote.setAttribute('aria-label', voted ? `You upvoted ${c.name}. ${c.votes} votes` : `Upvote ${c.name}. ${c.votes} votes`);
-  upvote.addEventListener('click', () => openVote(c));
+  button.setAttribute('aria-label', voted ? `You upvoted ${c.name}. ${c.votes} votes` : `Upvote ${c.name}. ${c.votes} votes`);
+  button.addEventListener('click', () => openVote(c));
+  return button;
+}
 
-  // The preview is live: it is not wrapped in a link, so clicks and typing reach the component.
-  const href = `#/c/${encodeURIComponent(c.id)}`;
-  const frame = el('iframe', { className: 'preview', title: `${c.name} preview`, loading: 'lazy' });
-  frame.setAttribute('sandbox', PREVIEW_SANDBOX);
-  frame.srcdoc = previewDoc(c);
-  const openLink = el('a', { className: 'open-link', href, textContent: 'Open full screen and view code →' });
-
-  const body = el(
-    'div',
-    { className: 'card-body' },
-    el(
-      'div',
-      { className: 'card-head' },
-      el(
-        'div',
-        {},
-        el('h2', {}, el('a', { className: 'name-link', href, textContent: c.name })),
-        el('p', { className: 'description', textContent: c.description })
-      ),
-      upvote
-    )
-  );
-  if (isSubmitted(c)) body.append(el('p', { className: 'added-by', textContent: `Added by ${c.author || 'Anonymous'}` }));
-
+// The team tally and comments shown on both component and idea cards.
+function appendVotes(body, c) {
   const teams = Object.entries(c.teams).sort((a, b) => b[1] - a[1]);
   if (teams.length) {
     body.append(el('ul', { className: 'teams' }, ...teams.map(([team, n]) => el('li', { textContent: `${team} · ${n}` }))));
   }
-
   if (c.comments.length) {
     body.append(
       el(
@@ -137,77 +127,134 @@ function renderCard(c) {
       )
     );
   }
+}
 
-  body.append(openLink);
+function renderCard(c) {
+  // The preview is live: it is not wrapped in a link, so clicks and typing reach the component.
+  const href = `#/c/${encodeURIComponent(c.id)}`;
+  const frame = el('iframe', { className: 'preview', title: `${c.name} preview`, loading: 'lazy' });
+  frame.setAttribute('sandbox', PREVIEW_SANDBOX);
+  frame.srcdoc = previewDoc(c);
+
+  const body = el(
+    'div',
+    { className: 'card-body' },
+    el(
+      'div',
+      { className: 'card-head' },
+      el(
+        'div',
+        {},
+        el('h3', {}, el('a', { className: 'name-link', href, textContent: c.name })),
+        el('p', { className: 'description', textContent: c.description })
+      ),
+      upvoteButton(c)
+    )
+  );
+  if (isSubmitted(c)) body.append(el('p', { className: 'added-by', textContent: `Added by ${c.author || 'Anonymous'}` }));
+  appendVotes(body, c);
+  body.append(el('a', { className: 'open-link', href, textContent: 'Open full screen and view code →' }));
   return el('article', { className: 'card' }, frame, body);
 }
+
+function renderIdea(idea) {
+  const card = el('article', { className: 'card idea-card' });
+  card.dataset.id = idea.id;
+  if (idea.hasScreenshot) {
+    const src = `/api/ideas/${encodeURIComponent(idea.id)}/screenshot`;
+    const link = el(
+      'a',
+      { className: 'idea-shot-link', href: src, target: '_blank', rel: 'noopener' },
+      el('img', { className: 'idea-shot', src, alt: `Screenshot for ${idea.name}`, loading: 'lazy' })
+    );
+    link.title = 'Open the screenshot full size';
+    card.append(link);
+  }
+  const body = el(
+    'div',
+    { className: 'card-body' },
+    el('div', { className: 'card-head' }, el('h3', { textContent: idea.name }), upvoteButton(idea)),
+    el('p', { className: 'idea-desc', textContent: idea.description }),
+    el('p', { className: 'added-by', textContent: `Suggested by ${idea.author || 'Anonymous'}` })
+  );
+  appendVotes(body, idea);
+  card.append(body);
+  return card;
+}
+
+const emptyNote = (text) => el('p', { className: 'empty', textContent: text });
 
 function renderBoard() {
   teamList.replaceChildren(...tally.teams.map((t) => el('option', { value: t })));
   const all = components();
-  if (!all.length) {
-    grid.replaceChildren(el('p', { className: 'empty', textContent: 'No components yet. Use "New component" to add the first one.' }));
-    return;
-  }
-  grid.replaceChildren(...all.map(renderCard));
+  grid.replaceChildren(...(all.length ? all.map(renderCard) : [emptyNote('No components yet. Use "New component" to add the first one.')]));
+  const ideaItems = ideas();
+  ideaGrid.replaceChildren(
+    ...(ideaItems.length ? ideaItems.map(renderIdea) : [emptyNote('No ideas yet. Use "Suggest an idea" to add the first one.')])
+  );
 }
 
 /* ---- Results ---- */
 
+function bar(fraction) {
+  const node = el('div', { className: 'bar' });
+  node.append(el('span'));
+  node.firstChild.style.width = `${fraction * 100}%`;
+  return node;
+}
+
 function barRow(label, count, max) {
-  const bar = el('div', { className: 'bar' });
-  bar.append(el('span'));
-  bar.firstChild.style.width = `${max ? (count / max) * 100 : 0}%`;
-  return el('li', {}, el('span', { textContent: label }), bar, el('strong', { textContent: String(count) }));
+  return el('li', {}, el('span', { textContent: label }), bar(max ? count / max : 0), el('strong', { textContent: String(count) }));
+}
+
+// Ranked rows. Components link to their editor; ideas have no page of their own.
+function rankRows(items, linkable) {
+  const max = Math.max(1, ...items.map((c) => c.votes));
+  return items.map((c, i) => {
+    const top = Object.entries(c.teams).sort((a, b) => b[1] - a[1])[0];
+    const notes = `${c.comments.length} comment${c.comments.length === 1 ? '' : 's'}${top ? ` · top team: ${top[0]}` : ''}`;
+    const name = linkable
+      ? el('a', { className: 'rank-name', href: `#/c/${encodeURIComponent(c.id)}`, textContent: c.name })
+      : el('span', { className: 'rank-name', textContent: c.name });
+    return el(
+      'li',
+      { className: 'rank-row' },
+      el('span', { className: 'rank', textContent: `#${i + 1}` }),
+      el('div', { className: 'rank-main' }, name, bar(c.votes / max), el('small', { textContent: notes })),
+      el('strong', { className: 'rank-votes', textContent: `▲ ${c.votes}` })
+    );
+  });
 }
 
 function renderResults() {
-  const all = components();
-  const totalVotes = all.reduce((n, c) => n + c.votes, 0);
-  const totalComments = all.reduce((n, c) => n + c.comments.length, 0);
+  const comps = components();
+  const ideaItems = ideas();
+  const everything = [...comps, ...ideaItems];
+  const totalVotes = everything.reduce((n, c) => n + c.votes, 0);
+  const totalComments = everything.reduce((n, c) => n + c.comments.length, 0);
 
   const stat = (value, label) => el('div', { className: 'stat' }, el('strong', { textContent: String(value) }), el('span', { textContent: label }));
   $('results-stats').replaceChildren(
-    stat(all.length, 'components'),
+    stat(comps.length, 'components'),
+    stat(ideaItems.length, 'ideas'),
     stat(totalVotes, 'upvotes'),
     stat(tally.teams.length, 'teams'),
     stat(totalComments, 'comments')
   );
   $('results-empty').hidden = totalVotes > 0;
-
-  const max = Math.max(1, ...all.map((c) => c.votes));
-  $('results-ranking').replaceChildren(
-    ...all.map((c, i) => {
-      const top = Object.entries(c.teams).sort((a, b) => b[1] - a[1])[0];
-      const bar = el('div', { className: 'bar' });
-      bar.append(el('span'));
-      bar.firstChild.style.width = `${(c.votes / max) * 100}%`;
-      const notes = `${c.comments.length} comment${c.comments.length === 1 ? '' : 's'}${top ? ` · top team: ${top[0]}` : ''}`;
-      return el(
-        'li',
-        { className: 'rank-row' },
-        el('span', { className: 'rank', textContent: `#${i + 1}` }),
-        el(
-          'div',
-          { className: 'rank-main' },
-          el('a', { className: 'rank-name', href: `#/c/${encodeURIComponent(c.id)}`, textContent: c.name }),
-          bar,
-          el('small', { textContent: notes })
-        ),
-        el('strong', { className: 'rank-votes', textContent: `▲ ${c.votes}` })
-      );
-    })
-  );
+  $('results-ranking').replaceChildren(...rankRows(comps, true));
+  $('results-ideas').replaceChildren(...rankRows(ideaItems, false));
+  $('results-ideas-empty').hidden = ideaItems.length > 0;
 
   const byTeam = {};
-  for (const c of all) for (const [team, n] of Object.entries(c.teams)) byTeam[team] = (byTeam[team] || 0) + n;
+  for (const c of everything) for (const [team, n] of Object.entries(c.teams)) byTeam[team] = (byTeam[team] || 0) + n;
   const teamRows = Object.entries(byTeam).sort((a, b) => b[1] - a[1]);
   const maxTeam = Math.max(1, ...teamRows.map(([, n]) => n));
   $('results-teams').replaceChildren(...teamRows.map(([team, n]) => barRow(team, n, maxTeam)));
   $('results-teams-empty').hidden = teamRows.length > 0;
 
-  const recent = all
-    .flatMap((c) => c.comments.map((m) => ({ ...m, component: c })))
+  const recent = everything
+    .flatMap((c) => c.comments.map((m) => ({ ...m, item: c })))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 10);
   $('results-comments').replaceChildren(
@@ -216,7 +263,7 @@ function renderResults() {
         'li',
         {},
         el('p', { textContent: m.comment }),
-        el('span', { className: 'by', textContent: `${m.name || 'Anonymous'} · ${m.team} · on ${m.component.name}` })
+        el('span', { className: 'by', textContent: `${m.name || 'Anonymous'} · ${m.team} · on ${m.item.name}` })
       )
     )
   );
@@ -405,7 +452,7 @@ function handleSubmit(form, requiredField, requiredMessage, send) {
   });
 }
 
-for (const dialog of [voteDialog, saveDialog]) {
+for (const dialog of [voteDialog, saveDialog, ideaDialog]) {
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close(); // backdrop click
   });
@@ -499,6 +546,98 @@ handleSubmit(saveForm, 'name', 'Please give the component a name.', async () => 
   location.hash = `#/c/${encodeURIComponent(component.id)}`;
 });
 
+/* ---- Test ideas ---- */
+
+const MAX_SCREENSHOT = 1_000_000; // characters of data URL; the server enforces the same limit
+const shotPreview = $('shot-preview');
+let ideaShot = ''; // data URL of the chosen screenshot, or ''
+let shotTask = Promise.resolve(); // the screenshot being shrunk, if any
+
+// Shrinks a screenshot to at most 1600 x 4000 px and re-encodes it so uploads stay small.
+async function screenshotDataUrl(file) {
+  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type)) throw new Error('Please choose a PNG, JPEG, WebP or GIF image.');
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / bitmap.width, 4000 / bitmap.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; // JPEG has no transparency
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+    let url = canvas.toDataURL('image/webp', quality);
+    if (!url.startsWith('data:image/webp')) url = canvas.toDataURL('image/jpeg', quality); // browsers without WebP encoding
+    if (url.length <= MAX_SCREENSHOT) return url;
+  }
+  throw new Error('That image is too large even after shrinking it. Try cropping it first.');
+}
+
+function setShot(url) {
+  ideaShot = url;
+  shotPreview.hidden = !url;
+  const img = shotPreview.querySelector('img');
+  if (url) img.src = url;
+  else img.removeAttribute('src');
+}
+
+function takeShot(file) {
+  showError(ideaForm, '');
+  shotTask = screenshotDataUrl(file).then(setShot, (err) => {
+    setShot('');
+    ideaForm.screenshot.value = '';
+    showError(ideaForm, err.message);
+  });
+}
+
+ideaForm.screenshot.addEventListener('change', () => {
+  const file = ideaForm.screenshot.files[0];
+  if (file) takeShot(file);
+  else setShot('');
+});
+// Pasting an image anywhere in the form uses it as the screenshot; pasting text works as usual.
+ideaDialog.addEventListener('paste', (event) => {
+  const file = [...(event.clipboardData?.files || [])].find((f) => f.type.startsWith('image/'));
+  if (!file) return;
+  event.preventDefault();
+  ideaForm.screenshot.value = '';
+  takeShot(file);
+});
+$('shot-remove').addEventListener('click', () => {
+  setShot('');
+  ideaForm.screenshot.value = '';
+});
+
+$('idea-open').addEventListener('click', () => {
+  ideaForm.reset();
+  showError(ideaForm, '');
+  setShot('');
+  ideaForm.author.value = (store(PROFILE_KEY) || {}).name || '';
+  ideaDialog.showModal();
+  ideaForm.title.focus();
+});
+$('idea-cancel').addEventListener('click', () => ideaDialog.close());
+
+handleSubmit(ideaForm, 'title', 'Please say what you would like to test.', async () => {
+  if (!ideaForm.description.value.trim()) {
+    ideaForm.description.focus();
+    throw new Error('Please add a short description.');
+  }
+  await shotTask;
+  const { idea } = await sendJson(
+    'POST',
+    '/api/ideas',
+    { title: ideaForm.title.value, description: ideaForm.description.value, author: ideaForm.author.value, screenshot: ideaShot },
+    'Could not add your idea.'
+  );
+  ideaList.push(idea);
+  store(PROFILE_KEY, { ...(store(PROFILE_KEY) || {}), name: ideaForm.author.value.trim() });
+  ideaDialog.close();
+  renderBoard();
+  ideaGrid.querySelector(`[data-id="${CSS.escape(idea.id)}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
 /* ---- Startup ---- */
 
 async function getJson(url) {
@@ -508,19 +647,22 @@ async function getJson(url) {
 }
 
 async function load() {
-  const [starter, added, votes] = await Promise.allSettled([
+  const [starter, added, ideaData, votes] = await Promise.allSettled([
     getJson('components.json'),
     getJson('/api/components'),
+    getJson('/api/ideas'),
     getJson('/api/votes'),
   ]);
   if (starter.status === 'fulfilled') builtIn = starter.value.components;
   if (added.status === 'fulfilled') submitted = added.value.components;
+  if (ideaData.status === 'fulfilled') ideaList = ideaData.value.ideas;
   if (votes.status === 'fulfilled') tally = votes.value;
 
   // Still show whatever loaded if the database is unreachable.
   const problems = [];
   if (starter.status === 'rejected') problems.push('The starter components could not be loaded.');
   if (added.status === 'rejected') problems.push('Components people added could not be loaded.');
+  if (ideaData.status === 'rejected') problems.push('Test ideas could not be loaded.');
   if (votes.status === 'rejected') problems.push('Votes could not be loaded, so counts may be missing.');
   notice.textContent = problems.join(' ');
   notice.hidden = !problems.length;

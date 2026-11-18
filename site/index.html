@@ -15,12 +15,19 @@
       </div>
       <nav class="header-actions">
         <a class="btn btn-ghost" href="#/results">Results</a>
+        <button type="button" id="idea-open" class="btn btn-ghost">+ Suggest an idea</button>
         <a class="btn btn-primary" href="#/new">+ New component</a>
       </nav>
     </header>
 
     <p id="notice" class="notice" role="status" hidden></p>
-    <main id="components" class="grid" aria-live="polite"></main>
+    <main>
+      <h2 class="section-title">Components</h2>
+      <div id="components" class="grid" aria-live="polite"></div>
+
+      <h2 class="section-title">Ideas to test</h2>
+      <div id="ideas" class="grid" aria-live="polite"></div>
+    </main>
   </div>
 
   <!-- Full-screen editor: code on top, live result below. -->
@@ -71,8 +78,12 @@
       <div id="results-stats" class="results-stats"></div>
       <p id="results-empty" class="empty" hidden>No votes yet. Results appear here once people start upvoting.</p>
 
-      <h3>Ranking</h3>
+      <h3>Components</h3>
       <ol id="results-ranking" class="ranking"></ol>
+
+      <h3>Ideas to test</h3>
+      <ol id="results-ideas" class="ranking"></ol>
+      <p id="results-ideas-empty" class="empty" hidden>No ideas yet.</p>
 
       <h3>Votes by team</h3>
       <ul id="results-teams" class="team-bars"></ul>
@@ -117,6 +128,56 @@
       <div class="actions">
         <button type="button" id="save-cancel" class="btn btn-ghost">Cancel</button>
         <button type="submit" id="save-submit" class="btn btn-primary">Add component</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="idea-dialog">
+    <form id="idea-form" class="dialog-form" method="dialog" novalidate>
+      <h2>Suggest something to A/B test</h2>
+
+      <label class="field">
+        <span class="label-row">
+          <span>What should we test?</span>
+          <span class="tag tag-required">Required</span>
+        </span>
+        <input name="title" maxlength="120" required autocomplete="off" placeholder="e.g. Shorter signup form">
+      </label>
+
+      <label class="field">
+        <span class="label-row">
+          <span>Description</span>
+          <span class="tag tag-required">Required</span>
+        </span>
+        <textarea name="description" rows="3" maxlength="1000" placeholder="What would you change, and what do you expect to happen?"></textarea>
+      </label>
+
+      <div class="field">
+        <span class="label-row">
+          <span id="shot-label">Screenshot</span>
+          <span class="tag tag-optional">Optional</span>
+        </span>
+        <input type="file" name="screenshot" accept="image/png,image/jpeg,image/webp,image/gif" aria-labelledby="shot-label">
+        <span class="hint">Choose an image, or paste one into this form. Large images are shrunk before they are uploaded.</span>
+        <div id="shot-preview" class="shot-preview" hidden>
+          <img alt="Screenshot preview">
+          <button type="button" id="shot-remove" class="btn btn-ghost btn-small">Remove</button>
+        </div>
+      </div>
+
+      <label class="field field-optional">
+        <span class="label-row">
+          <span>Your name</span>
+          <span class="tag tag-optional">Optional</span>
+        </span>
+        <input name="author" maxlength="60" autocomplete="name" placeholder="Leave blank to suggest it anonymously">
+      </label>
+
+      <p id="idea-error" class="error" role="alert" hidden></p>
+
+      <div class="actions">
+        <button type="button" id="idea-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-primary">Add idea</button>
       </div>
     </form>
   </dialog>

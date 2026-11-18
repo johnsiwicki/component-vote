@@ -125,3 +125,47 @@ test('edits are validated and only PUT edits components', async () => {
   assert.strictEqual((await put('/api/components/bad%20id!', { name: 'x', html: 'x' })).status, 404);
   assert.strictEqual((await fetch(`${base}/api/components/pill-button`, { method: 'POST', body: '{}' })).status, 405);
 });
+
+// A real 1x1 PNG and a few bytes that only claim to be one.
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+const FAKE_PNG = 'data:image/png;base64,' + Buffer.from('<svg onload=alert(1)>xxxxxxxxxx').toString('base64');
+
+test('people can suggest test ideas, with an optional screenshot', async () => {
+  assert.deepStrictEqual(await (await fetch(`${base}/api/ideas`)).json(), { ideas: [] });
+
+  const plain = await post('/api/ideas', { title: '  Shorter signup form ', description: 'Drop the phone field', author: 'Ana' });
+  assert.strictEqual(plain.status, 201);
+  const { idea } = await plain.json();
+  assert.match(idea.id, /^idea-shorter-signup-form-[0-9a-f]{6}$/);
+  assert.deepStrictEqual({ ...idea, id: '', createdAt: '' }, { id: '', title: 'Shorter signup form', description: 'Drop the phone field', author: 'Ana', hasScreenshot: false, createdAt: '' });
+  assert.strictEqual((await fetch(`${base}/api/ideas/${idea.id}/screenshot`)).status, 404);
+
+  const withShot = await (await post('/api/ideas', { title: 'Bigger CTA', description: 'See screenshot', screenshot: PNG })).json();
+  assert.strictEqual(withShot.idea.hasScreenshot, true);
+  assert.strictEqual(withShot.idea.author, '');
+
+  const list = (await (await fetch(`${base}/api/ideas`)).json()).ideas;
+  assert.deepStrictEqual(list.map((i) => i.title), ['Shorter signup form', 'Bigger CTA']);
+  assert.ok(list.every((i) => !('screenshot' in i))); // listing never carries image data
+
+  const image = await fetch(`${base}/api/ideas/${withShot.idea.id}/screenshot`);
+  assert.strictEqual(image.status, 200);
+  assert.strictEqual(image.headers.get('content-type'), 'image/png');
+  assert.strictEqual(image.headers.get('x-content-type-options'), 'nosniff');
+  assert.deepStrictEqual(Buffer.from(await image.arrayBuffer()), Buffer.from(PNG.split(',')[1], 'base64'));
+
+  // Ideas are voted on like components.
+  const voted = await (await vote(idea.id, { team: 'Growth', comment: 'Yes please' })).json();
+  assert.strictEqual(voted.components[idea.id].votes, 1);
+});
+
+test('ideas are validated', async () => {
+  assert.strictEqual((await post('/api/ideas', { description: 'no title' })).status, 400);
+  assert.strictEqual((await post('/api/ideas', { title: 'No description' })).status, 400);
+  assert.strictEqual((await post('/api/ideas', { title: 'x', description: 'y', screenshot: FAKE_PNG })).status, 400);
+  assert.strictEqual((await post('/api/ideas', { title: 'x', description: 'y', screenshot: 'data:image/svg+xml;base64,PHN2Zz4=' })).status, 400);
+  assert.strictEqual((await post('/api/ideas', { title: 'x', description: 'y', screenshot: PNG + 'A'.repeat(1_000_000) })).status, 400);
+  assert.strictEqual((await post('/api/ideas', { title: 'x', description: 'y' }, 'text/plain')).status, 415);
+  assert.strictEqual((await fetch(`${base}/api/ideas/bad%20id!/screenshot`)).status, 404);
+  assert.strictEqual((await fetch(`${base}/api/ideas`, { method: 'DELETE' })).status, 405);
+});

@@ -1,9 +1,12 @@
 // Spacefast Functions worker. Static files in this folder are served first;
-// everything else (the /api routes) lands here. Votes, the components people
-// add, and the history of their edits live in the Space's own database,
+// everything else (the /api routes) lands here. Votes, the components and test
+// ideas people add, and the history of edits live in the Space's own database,
 // reached through env.DB (https://spacefast.com/docs/database/).
 
-const LIMITS = { team: 60, name: 60, comment: 1000, title: 80, description: 300, code: 50_000 };
+const LIMITS = {
+  team: 60, name: 60, comment: 1000, title: 80, description: 300, code: 50_000,
+  ideaTitle: 120, ideaDescription: 1000, screenshot: 1_000_000, // screenshot: characters of data URL
+};
 const COMPONENT_ID = /^[a-z0-9][a-z0-9_-]{0,99}$/i;
 
 // Kept to SQL that both MySQL (Spacefast) and SQLite (local dev) accept.
@@ -42,6 +45,17 @@ const CREATE_HISTORY = `CREATE TABLE IF NOT EXISTS component_versions (
   saved_at VARCHAR(30) NOT NULL
 )`;
 
+// Ideas for things to A/B test. The optional screenshot is stored as a data URL
+// ('' when there is none) and served on its own route, so listing ideas stays small.
+const CREATE_IDEAS = `CREATE TABLE IF NOT EXISTS ideas (
+  id VARCHAR(100) PRIMARY KEY,
+  title VARCHAR(120) NOT NULL,
+  description TEXT NOT NULL,
+  author VARCHAR(60) NOT NULL,
+  screenshot MEDIUMTEXT NOT NULL,
+  created_at VARCHAR(30) NOT NULL
+)`;
+
 const tableReady = new WeakMap();
 function ensureTable(db) {
   if (!tableReady.has(db)) {
@@ -49,7 +63,8 @@ function ensureTable(db) {
       .prepare(CREATE_TABLE)
       .run()
       .then(() => db.prepare(CREATE_COMPONENTS).run())
-      .then(() => db.prepare(CREATE_HISTORY).run());
+      .then(() => db.prepare(CREATE_HISTORY).run())
+      .then(() => db.prepare(CREATE_IDEAS).run());
     tableReady.set(db, pending);
     pending.catch(() => tableReady.delete(db)); // retry on the next request
   }
@@ -65,6 +80,10 @@ function json(body, status = 200) {
 
 function clean(value, max) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
+}
+
+function slugify(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 }
 
 // { components: { [id]: { votes, teams: { [team]: n }, comments: [...] } }, teams: [...] }
@@ -156,9 +175,8 @@ async function addComponent(request, db) {
   if (parsed.error) return json({ error: parsed.error }, 400);
 
   const f = parsed.fields;
-  const slug = f.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'component';
   const row = {
-    id: `${slug}-${crypto.randomUUID().slice(0, 6)}`,
+    id: `${slugify(f.name) || 'component'}-${crypto.randomUUID().slice(0, 6)}`,
     ...f,
     created_at: new Date().toISOString(),
   };
@@ -204,6 +222,97 @@ async function saveComponent(request, db, id) {
   return json({ component: toComponent({ id, ...f, created_at: now }) });
 }
 
+// A screenshot arrives as a data URL. Only raster formats are accepted (SVG can
+// carry script), and the first bytes must match the format the URL declares.
+const SCREENSHOT = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/;
+const SIGNATURES = {
+  png: (b) => b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47,
+  jpeg: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff,
+  gif: (b) => b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x38,
+  webp: (b) => String.fromCharCode(...b.slice(0, 4)) === 'RIFF' && String.fromCharCode(...b.slice(8, 12)) === 'WEBP',
+};
+
+function decodeBase64(text) {
+  const binary = atob(text);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function readScreenshot(value) {
+  if (value === undefined || value === null || value === '') return { screenshot: '' };
+  if (typeof value !== 'string') return { error: 'The screenshot must be an image' };
+  if (value.length > LIMITS.screenshot) return { error: 'The screenshot is too large. Try a smaller or cropped image' };
+  const match = value.match(SCREENSHOT);
+  if (!match || match[2].length < 16 || !SIGNATURES[match[1]](decodeBase64(match[2].slice(0, 16)))) {
+    return { error: 'The screenshot must be a PNG, JPEG, WebP or GIF image' };
+  }
+  return { screenshot: value };
+}
+
+function toIdea(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    author: row.author,
+    hasScreenshot: Number(row.has_screenshot) === 1,
+    createdAt: row.created_at,
+  };
+}
+
+async function listIdeas(db) {
+  const { results } = await db
+    .prepare(
+      "SELECT id, title, description, author, created_at, CASE WHEN screenshot = '' THEN 0 ELSE 1 END AS has_screenshot FROM ideas ORDER BY created_at"
+    )
+    .all();
+  return { ideas: results.map(toIdea) };
+}
+
+async function addIdea(request, db) {
+  const { body, error } = await readJson(request, LIMITS.screenshot + 10_000);
+  if (error) return error;
+
+  const title = clean(body.title, LIMITS.ideaTitle);
+  if (!title) return json({ error: 'Say what you would like to test' }, 400);
+  const description = clean(body.description, LIMITS.ideaDescription);
+  if (!description) return json({ error: 'Add a short description' }, 400);
+  const shot = readScreenshot(body.screenshot);
+  if (shot.error) return json({ error: shot.error }, 400);
+
+  const row = {
+    // The "idea-" prefix keeps idea ids apart from component ids, so both can share the votes table.
+    id: `idea-${slugify(title) || 'test'}-${crypto.randomUUID().slice(0, 6)}`,
+    title,
+    description,
+    author: clean(body.author, LIMITS.name), // optional: empty means anonymous
+    screenshot: shot.screenshot,
+    created_at: new Date().toISOString(),
+  };
+  await db
+    .prepare('INSERT INTO ideas (id, title, description, author, screenshot, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .bind(row.id, row.title, row.description, row.author, row.screenshot, row.created_at)
+    .run();
+  return json({ idea: toIdea({ ...row, has_screenshot: row.screenshot ? 1 : 0 }) }, 201);
+}
+
+// Serves the stored screenshot as a plain image. It never changes once added, so it can be cached.
+async function serveScreenshot(db, id) {
+  if (!COMPONENT_ID.test(id)) return json({ error: 'Not found' }, 404);
+  const row = (await db.prepare('SELECT screenshot FROM ideas WHERE id = ?').bind(id).all()).results[0];
+  const match = row && row.screenshot && row.screenshot.match(SCREENSHOT);
+  if (!match) return json({ error: 'Not found' }, 404);
+  return new Response(decodeBase64(match[2]), {
+    headers: {
+      'Content-Type': `image/${match[1]}`,
+      'Cache-Control': 'private, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'",
+    },
+  });
+}
+
 async function castVote(request, db, componentId) {
   if (!COMPONENT_ID.test(componentId)) return json({ error: 'Unknown component' }, 404);
 
@@ -237,7 +346,9 @@ export default {
     const { pathname } = new URL(request.url);
     const voteMatch = pathname.match(/^\/api\/components\/([^/]+)\/votes$/);
     const componentMatch = pathname.match(/^\/api\/components\/([^/]+)$/);
-    const known = pathname === '/api/votes' || pathname === '/api/components' || voteMatch || componentMatch;
+    const screenshotMatch = pathname.match(/^\/api\/ideas\/([^/]+)\/screenshot$/);
+    const known =
+      ['/api/votes', '/api/components', '/api/ideas'].includes(pathname) || voteMatch || componentMatch || screenshotMatch;
     if (!known) return json({ error: 'Not found' }, 404);
 
     try {
@@ -250,6 +361,15 @@ export default {
         if (request.method !== 'PUT') return json({ error: 'Method not allowed' }, 405);
         return await saveComponent(request, env.DB, decodeURIComponent(componentMatch[1]));
       }
+      if (screenshotMatch) {
+        if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+        return await serveScreenshot(env.DB, decodeURIComponent(screenshotMatch[1]));
+      }
+      if (pathname === '/api/ideas') {
+        if (request.method === 'POST') return await addIdea(request, env.DB);
+        if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
+        return json(await listIdeas(env.DB));
+      }
       if (pathname === '/api/components') {
         if (request.method === 'POST') return await addComponent(request, env.DB);
         if (request.method !== 'GET') return json({ error: 'Method not allowed' }, 405);
@@ -259,7 +379,7 @@ export default {
       return json(await summary(env.DB));
     } catch (err) {
       console.error('component-vote request failed', err);
-      return json({ error: 'Something went wrong saving or loading votes.' }, 500);
+      return json({ error: 'Something went wrong. Please try again.' }, 500);
     }
   },
 };

@@ -9,6 +9,10 @@ HTML, CSS and JS panes with a live result underneath. Anyone can edit the code
 to try things out, save their version as a new component, or start a new one
 from scratch with **New component**.
 
+**Suggest an idea** lets anyone propose something to A/B test: a short title and
+description (both required), an optional screenshot, and an optional name. Ideas
+get upvotes and comments like components, and appear on the Results page.
+
 ## Layout
 
 ```
@@ -24,12 +28,14 @@ dev-server.js          local stand-in for Spacefast
 
 ## Where the data is stored
 
-Votes, and the components people add from the page, live in the Space's own
-database on Spacefast. `site/handler.js` runs as a
+Votes, the components and test ideas people add from the page, and screenshots
+live in the Space's own database on Spacefast. `site/handler.js` runs as a
 [Functions](https://spacefast.com/docs/functions/) worker and reaches the
 [database](https://spacefast.com/docs/database/) through `env.DB`. There is no
-connection string to configure. The worker creates its two tables, `votes` and
-`components`, on first use. To look at the rows, open the Space's **Database** page in the
+connection string to configure. The worker creates its tables (`votes`,
+`components`, `component_versions` and `ideas`) on first use. Screenshots are
+shrunk in the browser (at most 1600 px wide, about 1 MB) and stored in the
+`ideas` table. To look at the rows, open the Space's **Database** page in the
 Spacefast dashboard, or run `sf db console`.
 
 ## Publish to Spacefast
